@@ -3,6 +3,7 @@ const cors = require('cors');
 
 // Import your modular routes
 const authRoutes = require('./routes/auth');
+const dashboardRoutes = require('./routes/dashboard');
 
 const app = express();
 const PORT = process.env.PORT || 5001;
@@ -14,6 +15,7 @@ app.use(express.json());
 // Register Routes
 // This prefixes all routes in auth.js with '/api/auth'
 app.use('/api/auth', authRoutes); 
+app.use('/api/dashboard', dashboardRoutes);
 
 // A simple health-check route to test the server
 app.get('/api/status', (req, res) => {

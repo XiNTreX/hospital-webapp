@@ -1,0 +1,17 @@
+{
+    "sqltools.connections": [
+        {
+            "pgOptions": {
+                "ssl": {
+                    "rejectUnauthorized": true
+                }
+            },
+            "ssh": "Disabled",
+            "previewLimit": 50,
+            "server": "localhost",
+            "driver": "PostgreSQL",
+            "name": "Hospital_Web_App",
+            "connectString": "postgresql://neondb_owner:npg_Qr6ZJtgV5XSd@ep-dawn-thunder-azrrwodl.c-3.ap-southeast-1.aws.neon.tech/neondb?sslmode=require"
+        }
+    ]
+}
