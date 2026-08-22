@@ -21,6 +21,8 @@ app.use('/api/dashboard', dashboardRoutes);
 app.get('/api/status', (req, res) => {
   res.json({ message: 'Modular backend is running smoothly!' });
 });
+const adminRoutes = require('./routes/admin');
+app.use('/api/admin', adminRoutes);
 
 // Start the server
 app.listen(PORT, () => {

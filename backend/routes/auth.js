@@ -1,14 +1,12 @@
 const express = require('express');
+const router = express.Router();
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-const pool = require('../config/db'); // Notice the '../' to go up one folder
+const pool = require('../config/db');
+require('dotenv').config();
 
-const router = express.Router();
-
-// POST: /api/auth/register
 // POST: /api/auth/register
 router.post('/register', async (req, res) => {
-  // We extract all possible fields, including the new role, phone, and bloodGroup
   const { firstName, lastName, email, password, role, dob, gender, phone, bloodGroup } = req.body;
   const client = await pool.connect();
 
@@ -18,7 +16,7 @@ router.post('/register', async (req, res) => {
   }
 
   try {
-    await client.query('BEGIN');
+    await client.query('BEGIN'); // Start transaction
 
     const saltRounds = 10;
     const hashedPassword = await bcrypt.hash(password, saltRounds);
@@ -48,14 +46,13 @@ router.post('/register', async (req, res) => {
       );
     }
 
-    await client.query('COMMIT');
+    await client.query('COMMIT'); // Lock in the transaction
     
-    // Format the success message beautifully
     const roleName = role === 'PATIENT' ? 'Patient' : 'Blood Donor';
     res.status(201).json({ message: `${roleName} registered successfully!` });
 
   } catch (err) {
-    await client.query('ROLLBACK');
+    await client.query('ROLLBACK'); // Cancel everything if any step fails
     console.error('Registration Error:', err.message);
     if (err.code === '23505') {
       return res.status(400).json({ error: 'Email already exists.' });
@@ -66,37 +63,48 @@ router.post('/register', async (req, res) => {
   }
 });
 
+
 // POST: /api/auth/login
 router.post('/login', async (req, res) => {
-  const { email, password, role } = req.body;
+  const { email, password } = req.body;
 
   try {
-    const userResult = await pool.query(
-      `SELECT * FROM "USER_ACCOUNT" WHERE email = $1 AND user_type = $2`,
-      [email, role]
+    // 1. Find the user by email
+    const result = await pool.query(
+      `SELECT * FROM "USER_ACCOUNT" WHERE email = $1`,
+      [email]
     );
 
-    if (userResult.rows.length === 0) {
-      return res.status(401).json({ error: 'Invalid email, password, or role.' });
+    if (result.rows.length === 0) {
+      return res.status(401).json({ error: 'Invalid email or password.' });
     }
 
-    const user = userResult.rows[0];
-    const validPassword = await bcrypt.compare(password, user.password_hash);
+    const user = result.rows[0];
+
+    // 2. Compare the provided password with the hashed password in the DB
+    const isMatch = await bcrypt.compare(password, user.password_hash);
     
-    if (!validPassword) {
-      return res.status(401).json({ error: 'Invalid email, password, or role.' });
+    if (!isMatch) {
+      return res.status(401).json({ error: 'Invalid email or password.' });
     }
 
-    const token = jwt.sign(
-      { accountId: user.account_id, role: user.user_type }, 
-      process.env.JWT_SECRET,
-      { expiresIn: '2h' }
-    );
-
-    res.json({ 
-      message: 'Logged in successfully!',
-      token: token,
+    // 3. Create the JWT Payload (including the role!)
+    const payload = {
+      accountId: user.account_id,
       role: user.user_type
+    };
+
+    // 4. Sign the token
+    const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '1h' });
+
+    // 5. Send back the token AND the role so the frontend knows where to redirect
+    res.json({
+      message: 'Logged in successfully',
+      token,
+      user: {
+        accountId: user.account_id,
+        role: user.user_type
+      }
     });
 
   } catch (err) {
