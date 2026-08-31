@@ -1,28 +1,24 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, ChangeEvent } from 'react';
 import { useRouter } from 'next/navigation';
 
 export default function AdminGUI() {
   const router = useRouter();
   
-  // State for Schema and Selections
   const [schema, setSchema] = useState<Record<string, string[]>>({});
-  const [selectedTable, setSelectedTable] = useState('');
-  const [action, setAction] = useState('SELECT'); // SELECT, INSERT, UPDATE, DELETE
+  const [selectedTable, setSelectedTable] = useState<string>('');
+  const [action, setAction] = useState<string>('SELECT');
   
-  // State for Form Inputs
   const [formData, setFormData] = useState<Record<string, string>>({});
-  const [conditionCol, setConditionCol] = useState('');
-  const [conditionVal, setConditionVal] = useState('');
-  const [updateCol, setUpdateCol] = useState('');
-  const [updateVal, setUpdateVal] = useState('');
+  const [conditionCol, setConditionCol] = useState<string>('');
+  const [conditionVal, setConditionVal] = useState<string>('');
+  const [updateCol, setUpdateCol] = useState<string>('');
+  const [updateVal, setUpdateVal] = useState<string>('');
   
-  // State for Results/Errors
-  const [results, setResults] = useState<any>(null);
-  const [error, setError] = useState('');
+  const [results, setResults] = useState<{ command?: string; rowCount?: number; rows?: Record<string, unknown>[] } | null>(null);
+  const [error, setError] = useState<string>('');
 
-  // 1. Verify clearance and fetch database schema on load
   useEffect(() => {
     const token = localStorage.getItem('token');
     const role = localStorage.getItem('role');
@@ -37,17 +33,16 @@ export default function AdminGUI() {
         const res = await fetch('http://localhost:5001/api/admin/schema', {
           headers: { 'Authorization': `Bearer ${token}` }
         });
-        const data = await res.json();
+        const data: Record<string, string[]> = await res.json();
         setSchema(data);
         
-        // Default to the first table in the list if available
         const tables = Object.keys(data);
         if (tables.length > 0) {
           setSelectedTable(tables[0]);
-          setConditionCol(data[tables[0]][0]);
-          setUpdateCol(data[tables[0]][0]);
+          setConditionCol(data[tables[0]][0] || '');
+          setUpdateCol(data[tables[0]][0] || '');
         }
-      } catch (err) {
+      } catch {
         setError('Failed to load database schema.');
       }
     };
@@ -55,25 +50,24 @@ export default function AdminGUI() {
     fetchSchema();
   }, [router]);
 
-  // Handle Action Change (Reset fields)
-  const handleActionChange = (e: any) => {
+  const handleActionChange = (e: ChangeEvent<HTMLSelectElement>) => {
     setAction(e.target.value);
     setFormData({});
     setResults(null);
     setError('');
   };
 
-  // Handle Table Change
-  const handleTableChange = (e: any) => {
+  const handleTableChange = (e: ChangeEvent<HTMLSelectElement>) => {
     const newTable = e.target.value;
     setSelectedTable(newTable);
-    setConditionCol(schema[newTable][0]);
-    setUpdateCol(schema[newTable][0]);
+    if (schema[newTable] && schema[newTable].length > 0) {
+      setConditionCol(schema[newTable][0]);
+      setUpdateCol(schema[newTable][0]);
+    }
     setFormData({});
     setResults(null);
   };
 
-  // 2. Dynamically build and execute the SQL query based on UI inputs
   const executeOperation = async () => {
     setError('');
     setResults(null);
@@ -81,7 +75,6 @@ export default function AdminGUI() {
     let query = '';
     let values: string[] = [];
 
-    // Safely construct parameterized queries
     if (action === 'SELECT') {
       query = `SELECT * FROM "${selectedTable}" LIMIT 100`;
     } 
@@ -104,7 +97,6 @@ export default function AdminGUI() {
       values = [conditionVal];
     }
 
-    // Send to backend
     try {
       const response = await fetch('http://localhost:5001/api/admin/query', {
         method: 'POST',
@@ -121,7 +113,7 @@ export default function AdminGUI() {
       } else {
         setError(data.error || 'Operation failed.');
       }
-    } catch (err) {
+    } catch {
       setError('Failed to connect to the server.');
     }
   };
@@ -129,30 +121,27 @@ export default function AdminGUI() {
   const currentColumns = schema[selectedTable] || [];
 
   return (
-    <main className="min-h-screen bg-gray-50 p-8">
+    <main className="min-h-screen bg-slate-950 p-8 text-white">
       <div className="max-w-5xl mx-auto space-y-6">
         
-        {/* Header */}
-        <div className="flex justify-between items-center bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+        <div className="flex justify-between items-center bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-xl">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Admin Control Panel</h1>
-            <p className="text-gray-500 text-sm mt-1">Database Management Interface</p>
+            <h1 className="text-2xl font-bold text-white">Admin Control Panel</h1>
+            <p className="text-slate-400 text-sm mt-1">Database Management Interface</p>
           </div>
           <button 
             onClick={() => { localStorage.clear(); router.push('/login'); }}
-            className="bg-red-50 text-red-600 hover:bg-red-100 px-4 py-2 rounded-lg font-medium transition"
+            className="bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 border border-rose-500/30 px-4 py-2 rounded-xl font-medium transition"
           >
             Log Out
           </button>
         </div>
 
-        {/* GUI Controls */}
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-6">
-          
+        <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-xl space-y-6">
           <div className="flex gap-4">
             <div className="w-1/2">
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Target Table</label>
-              <select value={selectedTable} onChange={handleTableChange} className="w-full p-3 border rounded-lg bg-gray-50">
+              <label className="block text-xs font-semibold uppercase text-slate-400 mb-2">Target Table</label>
+              <select value={selectedTable} onChange={handleTableChange} className="w-full p-3 rounded-xl bg-slate-800 border border-slate-700 text-white outline-none">
                 {Object.keys(schema).map(table => (
                   <option key={table} value={table}>{table}</option>
                 ))}
@@ -160,8 +149,8 @@ export default function AdminGUI() {
             </div>
             
             <div className="w-1/2">
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Action</label>
-              <select value={action} onChange={handleActionChange} className="w-full p-3 border rounded-lg bg-blue-50 text-blue-800 font-semibold">
+              <label className="block text-xs font-semibold uppercase text-slate-400 mb-2">Action</label>
+              <select value={action} onChange={handleActionChange} className="w-full p-3 rounded-xl bg-slate-800 border border-teal-500/50 text-teal-400 font-semibold outline-none">
                 <option value="SELECT">View Data (SELECT)</option>
                 <option value="INSERT">Add New Record (INSERT)</option>
                 <option value="UPDATE">Modify Record (UPDATE)</option>
@@ -170,21 +159,18 @@ export default function AdminGUI() {
             </div>
           </div>
 
-          <hr className="border-gray-100" />
+          <hr className="border-slate-800" />
 
-          {/* Dynamic Forms based on Action */}
           <div className="space-y-4">
-            
-            {/* INSERT FORM */}
             {action === 'INSERT' && (
               <div className="grid grid-cols-2 gap-4">
                 {currentColumns.map(col => (
                   <div key={col}>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">{col}</label>
+                    <label className="block text-xs font-semibold text-slate-400 mb-1">{col}</label>
                     <input 
                       type="text" 
                       placeholder={`Enter ${col}...`}
-                      className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-600 outline-none"
+                      className="w-full p-3 rounded-xl bg-slate-800 border border-slate-700 text-white outline-none focus:border-teal-400"
                       value={formData[col] || ''}
                       onChange={(e) => setFormData({...formData, [col]: e.target.value})}
                     />
@@ -193,87 +179,82 @@ export default function AdminGUI() {
               </div>
             )}
 
-            {/* UPDATE FORM */}
             {action === 'UPDATE' && (
               <div className="space-y-4">
-                <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-                  <h3 className="font-semibold text-yellow-800 mb-3">1. Find the record:</h3>
+                <div className="p-4 bg-slate-800/50 border border-slate-700 rounded-xl">
+                  <h3 className="font-semibold text-teal-400 mb-3">1. Find the record:</h3>
                   <div className="flex gap-4 items-center">
                     <span>Where</span>
-                    <select value={conditionCol} onChange={(e) => setConditionCol(e.target.value)} className="p-2 border rounded bg-white">
+                    <select value={conditionCol} onChange={(e) => setConditionCol(e.target.value)} className="p-2 rounded-lg bg-slate-800 border border-slate-700">
                       {currentColumns.map(col => <option key={col} value={col}>{col}</option>)}
                     </select>
                     <span>equals</span>
-                    <input type="text" placeholder="Value..." className="p-2 border rounded flex-1" value={conditionVal} onChange={(e) => setConditionVal(e.target.value)} />
+                    <input type="text" placeholder="Value..." className="p-2 rounded-lg bg-slate-800 border border-slate-700 flex-1" value={conditionVal} onChange={(e) => setConditionVal(e.target.value)} />
                   </div>
                 </div>
 
-                <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                  <h3 className="font-semibold text-blue-800 mb-3">2. Change the data:</h3>
+                <div className="p-4 bg-slate-800/50 border border-slate-700 rounded-xl">
+                  <h3 className="font-semibold text-teal-400 mb-3">2. Change the data:</h3>
                   <div className="flex gap-4 items-center">
                     <span>Set</span>
-                    <select value={updateCol} onChange={(e) => setUpdateCol(e.target.value)} className="p-2 border rounded bg-white">
+                    <select value={updateCol} onChange={(e) => setUpdateCol(e.target.value)} className="p-2 rounded-lg bg-slate-800 border border-slate-700">
                       {currentColumns.map(col => <option key={col} value={col}>{col}</option>)}
                     </select>
                     <span>to new value</span>
-                    <input type="text" placeholder="New value..." className="p-2 border rounded flex-1" value={updateVal} onChange={(e) => setUpdateVal(e.target.value)} />
+                    <input type="text" placeholder="New value..." className="p-2 rounded-lg bg-slate-800 border border-slate-700 flex-1" value={updateVal} onChange={(e) => setUpdateVal(e.target.value)} />
                   </div>
                 </div>
               </div>
             )}
 
-            {/* DELETE FORM */}
             {action === 'DELETE' && (
-              <div className="p-4 bg-red-50 border border-red-200 rounded-lg flex gap-4 items-center">
-                <span className="text-red-800 font-semibold">Delete where</span>
-                <select value={conditionCol} onChange={(e) => setConditionCol(e.target.value)} className="p-2 border rounded bg-white">
+              <div className="p-4 bg-rose-950/20 border border-rose-900/40 rounded-xl flex gap-4 items-center">
+                <span className="text-rose-400 font-semibold">Delete where</span>
+                <select value={conditionCol} onChange={(e) => setConditionCol(e.target.value)} className="p-2 rounded-lg bg-slate-800 border border-slate-700 text-white">
                   {currentColumns.map(col => <option key={col} value={col}>{col}</option>)}
                 </select>
-                <span className="text-red-800 font-semibold">equals</span>
-                <input type="text" placeholder="Value..." className="p-2 border rounded flex-1" value={conditionVal} onChange={(e) => setConditionVal(e.target.value)} />
+                <span className="text-rose-400 font-semibold">equals</span>
+                <input type="text" placeholder="Value..." className="p-2 rounded-lg bg-slate-800 border border-slate-700 flex-1 text-white" value={conditionVal} onChange={(e) => setConditionVal(e.target.value)} />
               </div>
             )}
-
           </div>
 
           <button 
             onClick={executeOperation}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg shadow transition"
+            className="w-full bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-400 hover:to-emerald-400 text-slate-950 font-bold py-3.5 rounded-xl transition shadow-lg shadow-teal-500/20"
           >
             Execute {action}
           </button>
         </div>
 
-        {/* Error State */}
         {error && (
-          <div className="bg-red-50 border-l-4 border-red-600 text-red-700 p-4 rounded text-sm">
+          <div className="bg-rose-500/10 border border-rose-500/20 text-rose-400 p-4 rounded-xl text-sm">
             {error}
           </div>
         )}
 
-        {/* Results Area */}
         {results && (
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-            <p className="text-sm text-gray-500 mb-4">
-              Operation <span className="font-bold text-gray-900">{results.command}</span> completed. Rows affected: <span className="font-bold text-gray-900">{results.rowCount}</span>
+          <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-xl">
+            <p className="text-sm text-slate-400 mb-4">
+              Operation <span className="font-bold text-teal-400">{results.command}</span> completed. Rows affected: <span className="font-bold text-teal-400">{results.rowCount}</span>
             </p>
             
-            {results.rows.length > 0 && (
+            {results.rows && results.rows.length > 0 && (
               <div className="overflow-x-auto">
                 <table className="min-w-full border-collapse text-left text-sm">
                   <thead>
-                    <tr className="bg-gray-100">
+                    <tr className="bg-slate-800 border-b border-slate-700">
                       {Object.keys(results.rows[0]).map(key => (
-                        <th key={key} className="px-4 py-2 border-b border-gray-200 font-semibold text-gray-700">{key}</th>
+                        <th key={key} className="px-4 py-2 font-semibold text-slate-300">{key}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {results.rows.map((row: any, i: number) => (
-                      <tr key={i} className="hover:bg-gray-50 transition">
-                        {Object.values(row).map((val: any, j: number) => (
-                          <td key={j} className="px-4 py-2 border-b border-gray-100 text-gray-600">
-                            {val !== null ? String(val) : <span className="text-gray-400 italic">null</span>}
+                    {results.rows.map((row, i) => (
+                      <tr key={i} className="hover:bg-slate-800/50 border-b border-slate-800/60 transition">
+                        {Object.values(row).map((val, j) => (
+                          <td key={j} className="px-4 py-2 text-slate-300">
+                            {val !== null ? String(val) : <span className="text-slate-600 italic">null</span>}
                           </td>
                         ))}
                       </tr>

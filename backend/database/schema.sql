@@ -25,7 +25,7 @@ DROP TYPE IF EXISTS user_type_enum CASCADE;
 -- ==========================================
 -- 2. CREATE ENUMS & CORE ACCOUNTS
 -- ==========================================
-CREATE TYPE user_type_enum AS ENUM ('ADMIN', 'DOCTOR', 'PATIENT', 'BLOOD_DONOR');
+CREATE TYPE user_type_enum AS ENUM ('ADMIN', 'DOCTOR', 'PATIENT', 'BLOOD_DONOR','DRIVER');
 
 CREATE TABLE "USER_ACCOUNT" (
     account_id SERIAL PRIMARY KEY,
@@ -186,13 +186,23 @@ CREATE TABLE "IPD" (
 -- ==========================================
 -- 4. LOGISTICS & EMERGENCY SERVICES
 -- ==========================================
+-- CREATE TABLE "DRIVER" (
+--     driver_id SERIAL PRIMARY KEY,
+--     first_name VARCHAR(100) NOT NULL,
+--     last_name VARCHAR(100) NOT NULL,
+--     license_no VARCHAR(100) UNIQUE NOT NULL,
+--     phone VARCHAR(20) NOT NULL,
+--     status VARCHAR(50) NOT NULL
+-- );
 CREATE TABLE "DRIVER" (
     driver_id SERIAL PRIMARY KEY,
     first_name VARCHAR(100) NOT NULL,
     last_name VARCHAR(100) NOT NULL,
     license_no VARCHAR(100) UNIQUE NOT NULL,
     phone VARCHAR(20) NOT NULL,
-    status VARCHAR(50) NOT NULL
+    status VARCHAR(50) NOT NULL DEFAULT 'Available',
+    account_id INT UNIQUE NOT NULL,
+    FOREIGN KEY (account_id) REFERENCES "USER_ACCOUNT"(account_id) ON DELETE CASCADE
 );
 
 CREATE TABLE "DEPARTMENT" (

@@ -7,11 +7,11 @@ require('dotenv').config();
 
 // POST: /api/auth/register
 router.post('/register', async (req, res) => {
-  const { firstName, lastName, email, password, role, dob, gender, phone, bloodGroup } = req.body;
+  const { firstName, lastName, email, password, role, dob, gender, phone, bloodGroup, licenseNo } = req.body;
   const client = await pool.connect();
 
-  // Security check: Only allow these two roles to register via the public form
-  if (!['PATIENT', 'BLOOD_DONOR'].includes(role)) {
+  // Security check: Only allow PATIENT, BLOOD_DONOR, and DRIVER to register via public form
+  if (!['PATIENT', 'BLOOD_DONOR', 'DRIVER'].includes(role)) {
     return res.status(400).json({ error: 'Invalid registration role.' });
   }
 
@@ -44,18 +44,24 @@ router.post('/register', async (req, res) => {
          VALUES ($1, $2, $3, $4, $5, $6)`,
         [firstName, lastName, email, phone, bloodGroup, accountId]
       );
+    } else if (role === 'DRIVER') {
+      await client.query(
+        `INSERT INTO "DRIVER" (first_name, last_name, license_no, phone, status, account_id) 
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [firstName, lastName, licenseNo, phone, 'Available', accountId]
+      );
     }
 
-    await client.query('COMMIT'); // Lock in the transaction
+    await client.query('COMMIT'); // Lock in transaction
     
-    const roleName = role === 'PATIENT' ? 'Patient' : 'Blood Donor';
-    res.status(201).json({ message: `${roleName} registered successfully!` });
+    const roleLabels = { PATIENT: 'Patient', BLOOD_DONOR: 'Blood Donor', DRIVER: 'Ambulance Driver' };
+    res.status(201).json({ message: `${roleLabels[role]} registered successfully!` });
 
   } catch (err) {
-    await client.query('ROLLBACK'); // Cancel everything if any step fails
+    await client.query('ROLLBACK'); // Cancel transaction if any step fails
     console.error('Registration Error:', err.message);
     if (err.code === '23505') {
-      return res.status(400).json({ error: 'Email already exists.' });
+      return res.status(400).json({ error: 'Email or License Number already exists.' });
     }
     res.status(500).json({ error: 'Server error during registration.' });
   } finally {
@@ -63,13 +69,11 @@ router.post('/register', async (req, res) => {
   }
 });
 
-
 // POST: /api/auth/login
 router.post('/login', async (req, res) => {
   const { email, password } = req.body;
 
   try {
-    // 1. Find the user by email
     const result = await pool.query(
       `SELECT * FROM "USER_ACCOUNT" WHERE email = $1`,
       [email]
@@ -81,23 +85,19 @@ router.post('/login', async (req, res) => {
 
     const user = result.rows[0];
 
-    // 2. Compare the provided password with the hashed password in the DB
     const isMatch = await bcrypt.compare(password, user.password_hash);
     
     if (!isMatch) {
       return res.status(401).json({ error: 'Invalid email or password.' });
     }
 
-    // 3. Create the JWT Payload (including the role!)
     const payload = {
       accountId: user.account_id,
       role: user.user_type
     };
 
-    // 4. Sign the token
     const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '1h' });
 
-    // 5. Send back the token AND the role so the frontend knows where to redirect
     res.json({
       message: 'Logged in successfully',
       token,
