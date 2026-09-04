@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Xintrex Health Portal",
+  title: "Divided and Unpopular Health Portal",
   description: "Hospital Management System",
 };
 

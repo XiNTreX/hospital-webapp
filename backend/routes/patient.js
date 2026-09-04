@@ -145,23 +145,25 @@ router.get('/appointments/pending', verifyToken, async (req, res) => {
 // ==========================================
 // GET /api/patient/appointments/past
 // ==========================================
+// ==========================================
+// GET /api/patient/appointments/past
+// ==========================================
 router.get('/appointments/past', verifyToken, async (req, res) => {
   try {
     const { accountId } = req.user;
-    const today = new Date().toISOString().split('T')[0];
     
     const result = await pool.query(
       `SELECT a.appointment_id, a.date, a.time, a.serial_no, a.status,
-              a.doctor_id,  -- 👈 ADD THIS
+              a.doctor_id,
               d.first_name as doctor_first, d.last_name as doctor_last,
               d.specialization, d.photo_url
        FROM "APPOINTMENT" a
        JOIN "DOCTOR" d ON a.doctor_id = d.doctor_id
        JOIN "PATIENT" p ON a.patient_id = p.patient_id
        WHERE p.account_id = $1 
-         AND (a.status = 'Completed' OR a.status = 'Cancelled' OR a.date < $2)
+         AND a.status = 'Completed'
        ORDER BY a.date DESC, a.time DESC`,
-      [accountId, today]
+      [accountId]
     );
     res.json(result.rows);
   } catch (err) {
@@ -310,7 +312,88 @@ router.get('/tests', verifyToken, async (req, res) => {
     res.status(500).json({ error: 'Server error' });
   }
 });
+// ==========================================
+// PUT /api/patient/appointments/:id/reschedule
+// ==========================================
+router.put('/appointments/:id/reschedule', verifyToken, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { accountId } = req.user;
+    const appointmentId = parseInt(req.params.id);
+    const { date, time } = req.body;
 
+    if (!date || !time) {
+      return res.status(400).json({ error: 'Date and time are required for rescheduling' });
+    }
+
+    // Validate date validity (not past, not > 1 month)
+    const selectedDate = new Date(date);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const maxDate = new Date(today);
+    maxDate.setMonth(maxDate.getMonth() + 1);
+
+    if (selectedDate < today) {
+      return res.status(400).json({ error: 'Cannot reschedule appointments to the past' });
+    }
+    if (selectedDate > maxDate) {
+      return res.status(400).json({ error: 'Bookings only allowed up to 1 month in advance' });
+    }
+
+    await client.query('BEGIN');
+
+    // Verify the appointment belongs to the patient and is currently Scheduled
+    const aptResult = await client.query(
+      `SELECT a.appointment_id, a.doctor_id, a.status 
+       FROM "APPOINTMENT" a
+       JOIN "PATIENT" p ON a.patient_id = p.patient_id
+       WHERE a.appointment_id = $1 AND p.account_id = $2`,
+      [appointmentId, accountId]
+    );
+
+    if (aptResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Appointment not found' });
+    }
+
+    const appointment = aptResult.rows[0];
+    if (appointment.status !== 'Scheduled') {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Can only reschedule active scheduled appointments' });
+    }
+
+    const doctorId = appointment.doctor_id;
+
+    // Check if the new slot is available
+    const { isSessionAvailable } = require('../utils/schedule');
+    const available = await isSessionAvailable(doctorId, date, time, pool);
+    if (!available) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ error: 'This time slot is fully booked. Please choose another time.' });
+    }
+
+    // Update appointment date and time
+    await client.query(
+      `UPDATE "APPOINTMENT" SET date = $1, time = $2 WHERE appointment_id = $3`,
+      [date, time, appointmentId]
+    );
+
+    await client.query('COMMIT');
+    res.json({ 
+      message: 'Appointment rescheduled successfully',
+      appointment_id: appointmentId,
+      date,
+      time
+    });
+
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Reschedule appointment error:', err);
+    res.status(500).json({ error: 'Server error' });
+  } finally {
+    client.release();
+  }
+});
 // ==========================================
 // GET /api/patient/reports/pending
 // ==========================================

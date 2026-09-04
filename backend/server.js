@@ -1,26 +1,24 @@
 const express = require('express');
 const cors = require('cors');
+require('dotenv').config();
 
-const authRoutes = require('./routes/auth');
-const dashboardRoutes = require('./routes/dashboard');
-const adminRoutes = require('./routes/admin');
-const patientRoutes = require('./routes/patient');
+// Ensure path is exactly './config/db'
+const pool = require('./config/db'); 
 
 const app = express();
-const PORT = process.env.PORT || 5001;
 
 app.use(cors());
 app.use(express.json());
 
-app.use('/api/auth', authRoutes);
-app.use('/api/dashboard', dashboardRoutes);
-app.use('/api/admin', adminRoutes);
-app.use('/api/patient', patientRoutes);
+// Mount API Routes
+app.use('/api/auth', require('./routes/auth'));
+app.use('/api/admin', require('./routes/admin'));
+app.use('/api/dashboard', require('./routes/dashboard'));
+app.use('/api/patient', require('./routes/patient'));
+app.use('/api/doctor', require('./routes/doctor')); 
 
-app.get('/api/status', (req, res) => {
-  res.json({ message: 'Modular backend is running smoothly!' });
-});
+const PORT = process.env.PORT || 5001;
 
 app.listen(PORT, () => {
-  console.log(`Server is running on http://localhost:${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });
