@@ -110,11 +110,10 @@ export default function PatientDashboardPage() {
       {/* Dynamic Feedback Banner */}
       {message && (
         <div
-          className={`p-4 rounded-2xl border text-xs sm:text-sm font-medium ${
-            message.type === 'success'
-              ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-              : 'bg-rose-50 border-rose-200 text-rose-800'
-          }`}
+          className={`p-4 rounded-2xl border text-xs sm:text-sm font-medium ${message.type === 'success'
+            ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+            : 'bg-rose-50 border-rose-200 text-rose-800'
+            }`}
         >
           {message.text}
         </div>
@@ -125,11 +124,11 @@ export default function PatientDashboardPage() {
         <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-4">
           Quick Emergency & Care Actions
         </h2>
-        
+
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          
+
           {/* Book Appointment Card */}
-          <Link 
+          <Link
             href="/patient/appointments/book"
             className="group relative overflow-hidden rounded-3xl p-6 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl bg-gradient-to-br from-blue-600 via-blue-500 to-sky-500 text-white shadow-lg shadow-blue-500/20 border border-blue-400/30"
           >
@@ -147,8 +146,8 @@ export default function PatientDashboardPage() {
           </Link>
 
           {/* Request for Blood Card */}
-          <Link 
-            href="/patient/blood-requests/new"
+          <Link
+            href="/patient/blood-requests/new"  // 👈 This should link to /patient/blood-requests/new
             className="group relative overflow-hidden rounded-3xl p-6 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl bg-gradient-to-br from-rose-600 via-pink-600 to-rose-500 text-white shadow-lg shadow-rose-500/20 border border-rose-400/30"
           >
             <div className="flex items-center gap-4 mb-4">
@@ -165,8 +164,8 @@ export default function PatientDashboardPage() {
           </Link>
 
           {/* Request for Ambulance Card */}
-          <Link 
-            href="/patient/ambulance-requests/new"
+          <Link
+            href="/patient/ambulance-requests/new"  // 👈 This should link to /patient/ambulance-requests/new
             className="group relative overflow-hidden rounded-3xl p-6 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl bg-gradient-to-br from-amber-600 via-orange-500 to-amber-500 text-white shadow-lg shadow-orange-500/20 border border-amber-400/30"
           >
             <div className="flex items-center gap-4 mb-4">
