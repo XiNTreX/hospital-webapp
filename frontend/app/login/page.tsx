@@ -40,7 +40,7 @@ export default function LoginPage() {
         localStorage.setItem('token', data.token);
         
         // 2. Extract the role from the backend response
-        const userRole = data.user?.role || data.role; 
+        const userRole = data.user?.role || data.role || data.user?.user_type || data.user_type; 
         if (userRole) {
           localStorage.setItem('role', userRole);
         }
@@ -50,6 +50,10 @@ export default function LoginPage() {
           router.push('/admin');
         } else if (userRole === 'DOCTOR') {
           router.push('/doctor/dashboard');
+        } else if (userRole === 'BLOOD_DONOR') {
+          router.push('/donor/dashboard');
+        } else if (userRole === 'DRIVER') {
+          router.push('/driver/dashboard');
         } else {
           router.push('/patient/dashboard'); 
         }
