@@ -13,7 +13,8 @@ export default function DoctorAppointmentsPage() {
 
       try {
         const response = await fetch('http://localhost:5001/api/doctor/appointments', {
-          headers: { 'Authorization': `Bearer ${token}` }
+          headers: { 'Authorization': `Bearer ${token}` },
+          cache: 'no-store'
         });
         
         if (response.ok) {

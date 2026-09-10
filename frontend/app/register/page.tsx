@@ -1,10 +1,11 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
 export default function RegisterPage() {
-  const [activeTab, setActiveTab] = useState<'REGISTER' | 'LOGIN'>('REGISTER');
+  const router = useRouter();
 
   // Form state holding all role-specific attributes
   const [formData, setFormData] = useState({
@@ -25,9 +26,6 @@ export default function RegisterPage() {
     // Driver specific
     licenseNo: '',
     vehicleType: 'Standard Ambulance',
-    // Doctor / Staff specific
-    medicalLicenseNo: '',
-    department: 'General Medicine',
     // Agreements
     agreeTerms: false,
   });
@@ -56,13 +54,6 @@ export default function RegisterPage() {
   };
 
   const validateForm = () => {
-    if (activeTab === 'LOGIN') {
-      if (!formData.email || !formData.password) {
-        return 'Please provide both email and password to sign in.';
-      }
-      return null;
-    }
-
     if (!formData.firstName || !formData.lastName || !formData.email || !formData.password) {
       return 'Please fill out all required basic profile fields.';
     }
@@ -85,13 +76,10 @@ export default function RegisterPage() {
       return 'Date of Birth is required for patients.';
     }
     if (formData.role === 'BLOOD_DONOR' && !formData.phone) {
-      return 'A active phone number is required for blood donor dispatch.';
+      return 'An active phone number is required for blood donor dispatch.';
     }
     if (formData.role === 'DRIVER' && (!formData.phone || !formData.licenseNo)) {
       return 'Both Phone Number and Driver License Number are required for emergency drivers.';
-    }
-    if (formData.role === 'DOCTOR' && (!formData.phone || !formData.medicalLicenseNo)) {
-      return 'Medical License Number and Phone are required for clinical verification.';
     }
 
     if (!formData.agreeTerms) {
@@ -114,56 +102,24 @@ export default function RegisterPage() {
 
     setIsSubmitting(true);
 
-    const endpoint = activeTab === 'REGISTER'
-      ? 'http://localhost:5001/api/auth/register'
-      : 'http://localhost:5001/api/auth/login';
-
-    const payload = activeTab === 'REGISTER'
-      ? formData
-      : { email: formData.email, password: formData.password };
-
     try {
-      const response = await fetch(endpoint, {
+      const response = await fetch('http://localhost:5001/api/auth/register', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(formData),
       });
 
       const data = await response.json();
 
       if (response.ok) {
-        if (activeTab === 'REGISTER') {
-          setSuccessMessage('Account registered successfully! Redirecting to login...');
-          setTimeout(() => {
-            setActiveTab('LOGIN');
-            setSuccessMessage('');
-          }, 2000);
-        } else {
-          setSuccessMessage('Sign in successful! Entering medical portal...');
-          if (data.token) localStorage.setItem('token', data.token);
-
-          // 1. Save user object to localStorage so the Patient header/layout can read it
-          if (data.user) {
-            localStorage.setItem('userData', JSON.stringify(data.user));
-          }
-
-          // 2. Redirect based on role or fallback to patient dashboard
-          setTimeout(() => {
-            const userRole = data.user?.role || data.role || formData.role;
-
-            if (userRole === 'PATIENT') {
-              window.location.href = '/patient/dashboard';
-            } else if (data.redirectUrl && data.redirectUrl !== '/dashboard') {
-              window.location.href = data.redirectUrl;
-            } else {
-              window.location.href = '/patient/dashboard';
-            }
-          }, 1500);
-        }
+        setSuccessMessage('Account registered successfully! Redirecting to login...');
+        setTimeout(() => {
+          router.push('/login');
+        }, 2000);
       } else {
-        setErrorMessage(data.error || `${activeTab === 'REGISTER' ? 'Registration' : 'Login'} failed.`);
+        setErrorMessage(data.error || 'Registration failed.');
       }
     } catch (error) {
       console.error('Fetch error:', error);
@@ -206,32 +162,26 @@ export default function RegisterPage() {
           <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
             <button
               type="button"
-              onClick={() => { setActiveTab('REGISTER'); setErrorMessage(''); }}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition ${activeTab === 'REGISTER' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:text-slate-900'
-                }`}
+              className="px-3 py-1.5 text-xs font-semibold rounded-lg transition bg-blue-600 text-white shadow-md cursor-default"
             >
               Register
             </button>
-            <button
-              type="button"
-              onClick={() => { setActiveTab('LOGIN'); setErrorMessage(''); }}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition ${activeTab === 'LOGIN' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:text-slate-900'
-                }`}
+            <Link
+              href="/login"
+              className="px-3 py-1.5 text-xs font-semibold rounded-lg transition text-slate-500 hover:text-slate-900"
             >
               Sign In
-            </button>
+            </Link>
           </div>
         </div>
 
         {/* Title Header */}
         <div className="text-center mb-6">
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900">
-            {activeTab === 'REGISTER' ? 'Create Medical Network Account' : 'Sign In to Portal'}
+            Create Medical Network Account
           </h1>
           <p className="text-slate-500 text-xs sm:text-sm mt-1">
-            {activeTab === 'REGISTER'
-              ? 'Select your healthcare role to customize your specialized dashboard'
-              : 'Enter your credentials to access patient logs, donor alerts, or ambulance dispatch.'}
+            Select your healthcare role to customize your specialized dashboard
           </p>
         </div>
 
@@ -256,98 +206,81 @@ export default function RegisterPage() {
 
         <form onSubmit={handleSubmit} className="space-y-5">
 
-          {/* REGISTER MODE ONLY: Role Selection Grid */}
-          {activeTab === 'REGISTER' && (
+          {/* Role Selection Grid */}
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-2.5">
+              Select Your Network Role
+            </label>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 p-1.5 rounded-2xl bg-slate-50 border border-slate-200">
+
+              {/* Patient Role */}
+              <button
+                type="button"
+                onClick={() => setFormData({ ...formData, role: 'PATIENT' })}
+                className={`flex flex-col items-center justify-center p-3 rounded-xl border text-center transition ${formData.role === 'PATIENT'
+                    ? 'bg-blue-600 text-white border-blue-500 shadow-md font-bold'
+                    : 'border-transparent text-slate-500 hover:bg-slate-100 hover:text-slate-900'
+                  }`}
+              >
+                <span className="text-base mb-0.5">🏥</span>
+                <span className="text-xs">Patient</span>
+              </button>
+
+              {/* Blood Donor Role */}
+              <button
+                type="button"
+                onClick={() => setFormData({ ...formData, role: 'BLOOD_DONOR' })}
+                className={`flex flex-col items-center justify-center p-3 rounded-xl border text-center transition ${formData.role === 'BLOOD_DONOR'
+                    ? 'bg-rose-500 text-white border-rose-400 shadow-md font-bold'
+                    : 'border-transparent text-slate-500 hover:bg-slate-100 hover:text-slate-900'
+                  }`}
+              >
+                <span className="text-base mb-0.5">🩸</span>
+                <span className="text-xs">Blood Donor</span>
+              </button>
+
+              {/* Driver Role */}
+              <button
+                type="button"
+                onClick={() => setFormData({ ...formData, role: 'DRIVER' })}
+                className={`flex flex-col items-center justify-center p-3 rounded-xl border text-center transition ${formData.role === 'DRIVER'
+                    ? 'bg-amber-500 text-white border-amber-400 shadow-md font-bold'
+                    : 'border-transparent text-slate-500 hover:bg-slate-100 hover:text-slate-900'
+                  }`}
+              >
+                <span className="text-base mb-0.5">🚑</span>
+                <span className="text-xs">Driver</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Name Fields */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-2.5">
-                Select Your Network Role
-              </label>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-1.5 rounded-2xl bg-slate-50 border border-slate-200">
-
-                {/* Patient Role */}
-                <button
-                  type="button"
-                  onClick={() => setFormData({ ...formData, role: 'PATIENT' })}
-                  className={`flex flex-col items-center justify-center p-3 rounded-xl border text-center transition ${formData.role === 'PATIENT'
-                      ? 'bg-blue-600 text-white border-blue-500 shadow-md font-bold'
-                      : 'border-transparent text-slate-500 hover:bg-slate-100 hover:text-slate-900'
-                    }`}
-                >
-                  <span className="text-base mb-0.5">🏥</span>
-                  <span className="text-xs">Patient</span>
-                </button>
-
-                {/* Blood Donor Role */}
-                <button
-                  type="button"
-                  onClick={() => setFormData({ ...formData, role: 'BLOOD_DONOR' })}
-                  className={`flex flex-col items-center justify-center p-3 rounded-xl border text-center transition ${formData.role === 'BLOOD_DONOR'
-                      ? 'bg-rose-500 text-white border-rose-400 shadow-md font-bold'
-                      : 'border-transparent text-slate-500 hover:bg-slate-100 hover:text-slate-900'
-                    }`}
-                >
-                  <span className="text-base mb-0.5">🩸</span>
-                  <span className="text-xs">Blood Donor</span>
-                </button>
-
-                {/* Driver Role */}
-                <button
-                  type="button"
-                  onClick={() => setFormData({ ...formData, role: 'DRIVER' })}
-                  className={`flex flex-col items-center justify-center p-3 rounded-xl border text-center transition ${formData.role === 'DRIVER'
-                      ? 'bg-amber-500 text-white border-amber-400 shadow-md font-bold'
-                      : 'border-transparent text-slate-500 hover:bg-slate-100 hover:text-slate-900'
-                    }`}
-                >
-                  <span className="text-base mb-0.5">🚑</span>
-                  <span className="text-xs">Driver</span>
-                </button>
-
-                {/* Doctor / Healthcare Provider Role */}
-                <button
-                  type="button"
-                  onClick={() => setFormData({ ...formData, role: 'DOCTOR' })}
-                  className={`flex flex-col items-center justify-center p-3 rounded-xl border text-center transition ${formData.role === 'DOCTOR'
-                      ? 'bg-teal-600 text-white border-teal-500 shadow-md font-bold'
-                      : 'border-transparent text-slate-500 hover:bg-slate-100 hover:text-slate-900'
-                    }`}
-                >
-                  <span className="text-base mb-0.5">🩺</span>
-                  <span className="text-xs">Doctor / Staff</span>
-                </button>
-              </div>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-2">First Name</label>
+              <input
+                type="text"
+                name="firstName"
+                value={formData.firstName}
+                onChange={handleChange}
+                required
+                placeholder="John"
+                className="w-full px-4 py-3 rounded-xl bg-white border border-slate-300 text-slate-900 placeholder-slate-400 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition text-sm"
+              />
             </div>
-          )}
-
-          {/* Name Fields (Registration Only) */}
-          {activeTab === 'REGISTER' && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-2">First Name</label>
-                <input
-                  type="text"
-                  name="firstName"
-                  value={formData.firstName}
-                  onChange={handleChange}
-                  required
-                  placeholder="John"
-                  className="w-full px-4 py-3 rounded-xl bg-white border border-slate-300 text-slate-900 placeholder-slate-400 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-2">Last Name</label>
-                <input
-                  type="text"
-                  name="lastName"
-                  value={formData.lastName}
-                  onChange={handleChange}
-                  required
-                  placeholder="Doe"
-                  className="w-full px-4 py-3 rounded-xl bg-white border border-slate-300 text-slate-900 placeholder-slate-400 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition text-sm"
-                />
-              </div>
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-2">Last Name</label>
+              <input
+                type="text"
+                name="lastName"
+                value={formData.lastName}
+                onChange={handleChange}
+                required
+                placeholder="Doe"
+                className="w-full px-4 py-3 rounded-xl bg-white border border-slate-300 text-slate-900 placeholder-slate-400 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition text-sm"
+              />
             </div>
-          )}
+          </div>
 
           {/* Email Address */}
           <div>
@@ -404,34 +337,32 @@ export default function RegisterPage() {
               </div>
             </div>
 
-            {activeTab === 'REGISTER' && (
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-2">Confirm Password</label>
-                <div className="relative">
-                  <input
-                    type={showPassword ? "text" : "password"}
-                    name="confirmPassword"
-                    value={formData.confirmPassword}
-                    onChange={handleChange}
-                    required
-                    placeholder="••••••••"
-                    className={`w-full px-4 py-3 pl-10 rounded-xl bg-white border text-slate-900 placeholder-slate-400 outline-none transition text-sm ${formData.confirmPassword
-                        ? passwordsMatch
-                          ? 'border-emerald-400 focus:border-emerald-500'
-                          : 'border-rose-400 focus:border-rose-500'
-                        : 'border-slate-300 focus:border-blue-500'
-                      }`}
-                  />
-                  <svg className="w-5 h-5 text-slate-400 absolute left-3 top-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                  </svg>
-                </div>
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-2">Confirm Password</label>
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  name="confirmPassword"
+                  value={formData.confirmPassword}
+                  onChange={handleChange}
+                  required
+                  placeholder="••••••••"
+                  className={`w-full px-4 py-3 pl-10 rounded-xl bg-white border text-slate-900 placeholder-slate-400 outline-none transition text-sm ${formData.confirmPassword
+                      ? passwordsMatch
+                        ? 'border-emerald-400 focus:border-emerald-500'
+                        : 'border-rose-400 focus:border-rose-500'
+                      : 'border-slate-300 focus:border-blue-500'
+                    }`}
+                />
+                <svg className="w-5 h-5 text-slate-400 absolute left-3 top-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                </svg>
               </div>
-            )}
+            </div>
           </div>
 
           {/* Real-time Password Security Live Requirements Box */}
-          {activeTab === 'REGISTER' && hasStartedTyping && (
+          {hasStartedTyping && (
             <div className="text-xs space-y-1.5 bg-slate-50 p-3.5 rounded-2xl border border-slate-200 text-slate-500">
               <p className="font-semibold text-slate-600 text-[11px] uppercase tracking-wider mb-1">Security Standards:</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1">
@@ -446,186 +377,148 @@ export default function RegisterPage() {
           )}
 
           {/* Dynamic Role Specific Fields for Registration */}
-          {activeTab === 'REGISTER' && (
-            <div className="pt-2">
-
-              {/* Patient Fields */}
-              {formData.role === 'PATIENT' && (
-                <div className="space-y-4 bg-blue-50/60 p-4 rounded-2xl border border-blue-100">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-blue-700 uppercase tracking-wider">Patient Health Profile</span>
-                    <span className="text-[10px] text-blue-600 bg-blue-100 px-2 py-0.5 rounded-full border border-blue-200">Basic Health Log</span>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-2">Date of Birth</label>
-                      <input
-                        type="date"
-                        name="dob"
-                        value={formData.dob}
-                        onChange={handleChange}
-                        className="w-full px-4 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-900 outline-none focus:border-blue-500 text-sm"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-2">Gender</label>
-                      <select
-                        name="gender"
-                        value={formData.gender}
-                        onChange={handleChange}
-                        className="w-full px-4 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-900 outline-none focus:border-blue-500 text-sm"
-                      >
-                        <option value="Male">Male</option>
-                        <option value="Female">Female</option>
-                        <option value="Other">Other</option>
-                      </select>
-                    </div>
+          <div className="pt-2">
+            {/* Patient Fields */}
+            {formData.role === 'PATIENT' && (
+              <div className="space-y-4 bg-blue-50/60 p-4 rounded-2xl border border-blue-100">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-blue-700 uppercase tracking-wider">Patient Health Profile</span>
+                  <span className="text-[10px] text-blue-600 bg-blue-100 px-2 py-0.5 rounded-full border border-blue-200">Basic Health Log</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-2">Date of Birth</label>
+                    <input
+                      type="date"
+                      name="dob"
+                      value={formData.dob}
+                      onChange={handleChange}
+                      className="w-full px-4 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-900 outline-none focus:border-blue-500 text-sm"
+                    />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-2">Emergency Contact Phone (Optional)</label>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-2">Gender</label>
+                    <select
+                      name="gender"
+                      value={formData.gender}
+                      onChange={handleChange}
+                      className="w-full px-4 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-900 outline-none focus:border-blue-500 text-sm"
+                    >
+                      <option value="Male">Male</option>
+                      <option value="Female">Female</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-2">Emergency Contact Phone (Optional)</label>
+                  <input
+                    type="tel"
+                    name="emergencyPhone"
+                    value={formData.emergencyPhone}
+                    onChange={handleChange}
+                    placeholder="+8801700000000"
+                    className="w-full px-4 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-900 placeholder-slate-400 outline-none focus:border-blue-500 text-sm"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Blood Donor Fields */}
+            {formData.role === 'BLOOD_DONOR' && (
+              <div className="space-y-4 bg-rose-50/60 p-4 rounded-2xl border border-rose-100">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-rose-700 uppercase tracking-wider">Blood Donor Registry</span>
+                  <span className="text-[10px] text-rose-600 bg-rose-100 px-2 py-0.5 rounded-full border border-rose-200">Urgent Dispatch Ready</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-rose-700 mb-2">Phone Number</label>
                     <input
                       type="tel"
-                      name="emergencyPhone"
-                      value={formData.emergencyPhone}
+                      name="phone"
+                      value={formData.phone}
                       onChange={handleChange}
-                      placeholder="+8801700000000"
-                      className="w-full px-4 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-900 placeholder-slate-400 outline-none focus:border-blue-500 text-sm"
+                      placeholder="+8801712345678"
+                      className="w-full px-4 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-900 placeholder-slate-400 outline-none focus:border-rose-500 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-rose-700 mb-2">Blood Group</label>
+                    <select
+                      name="bloodGroup"
+                      value={formData.bloodGroup}
+                      onChange={handleChange}
+                      className="w-full px-4 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-900 outline-none focus:border-rose-500 text-sm font-semibold text-rose-600"
+                    >
+                      <option value="A+">A+</option>
+                      <option value="A-">A-</option>
+                      <option value="B+">B+</option>
+                      <option value="B-">B-</option>
+                      <option value="AB+">AB+</option>
+                      <option value="AB-">AB-</option>
+                      <option value="O+">O+</option>
+                      <option value="O-">O-</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Driver Fields */}
+            {formData.role === 'DRIVER' && (
+              <div className="space-y-4 bg-amber-50/60 p-4 rounded-2xl border border-amber-100">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-amber-700 uppercase tracking-wider">Emergency Driver Information</span>
+                  <span className="text-[10px] text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full border border-amber-200">Ambulance Network</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-amber-700 mb-2">Phone Number</label>
+                    <input
+                      type="tel"
+                      name="phone"
+                      value={formData.phone}
+                      onChange={handleChange}
+                      placeholder="+8801712345678"
+                      className="w-full px-4 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-900 placeholder-slate-400 outline-none focus:border-amber-500 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-amber-700 mb-2">Driver License Number</label>
+                    <input
+                      type="text"
+                      name="licenseNo"
+                      value={formData.licenseNo}
+                      onChange={handleChange}
+                      placeholder="DL-8829102"
+                      className="w-full px-4 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-900 placeholder-slate-400 outline-none focus:border-amber-500 text-sm"
                     />
                   </div>
                 </div>
-              )}
-
-              {/* Blood Donor Fields */}
-              {formData.role === 'BLOOD_DONOR' && (
-                <div className="space-y-4 bg-rose-50/60 p-4 rounded-2xl border border-rose-100">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-rose-700 uppercase tracking-wider">Blood Donor Registry</span>
-                    <span className="text-[10px] text-rose-600 bg-rose-100 px-2 py-0.5 rounded-full border border-rose-200">Urgent Dispatch Ready</span>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-semibold uppercase tracking-wider text-rose-700 mb-2">Phone Number</label>
-                      <input
-                        type="tel"
-                        name="phone"
-                        value={formData.phone}
-                        onChange={handleChange}
-                        placeholder="+8801712345678"
-                        className="w-full px-4 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-900 placeholder-slate-400 outline-none focus:border-rose-500 text-sm"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold uppercase tracking-wider text-rose-700 mb-2">Blood Group</label>
-                      <select
-                        name="bloodGroup"
-                        value={formData.bloodGroup}
-                        onChange={handleChange}
-                        className="w-full px-4 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-900 outline-none focus:border-rose-500 text-sm font-semibold text-rose-600"
-                      >
-                        <option value="A+">A+</option>
-                        <option value="A-">A-</option>
-                        <option value="B+">B+</option>
-                        <option value="B-">B-</option>
-                        <option value="AB+">AB+</option>
-                        <option value="AB-">AB-</option>
-                        <option value="O+">O+</option>
-                        <option value="O-">O-</option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Driver Fields */}
-              {formData.role === 'DRIVER' && (
-                <div className="space-y-4 bg-amber-50/60 p-4 rounded-2xl border border-amber-100">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-amber-700 uppercase tracking-wider">Emergency Driver Information</span>
-                    <span className="text-[10px] text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full border border-amber-200">Ambulance Network</span>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-semibold uppercase tracking-wider text-amber-700 mb-2">Phone Number</label>
-                      <input
-                        type="tel"
-                        name="phone"
-                        value={formData.phone}
-                        onChange={handleChange}
-                        placeholder="+8801712345678"
-                        className="w-full px-4 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-900 placeholder-slate-400 outline-none focus:border-amber-500 text-sm"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold uppercase tracking-wider text-amber-700 mb-2">Driver License Number</label>
-                      <input
-                        type="text"
-                        name="licenseNo"
-                        value={formData.licenseNo}
-                        onChange={handleChange}
-                        placeholder="DL-8829102"
-                        className="w-full px-4 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-900 placeholder-slate-400 outline-none focus:border-amber-500 text-sm"
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Doctor / Healthcare Staff Fields */}
-              {formData.role === 'DOCTOR' && (
-                <div className="space-y-4 bg-teal-50/60 p-4 rounded-2xl border border-teal-100">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-teal-700 uppercase tracking-wider">Clinical Practitioner Credentials</span>
-                    <span className="text-[10px] text-teal-600 bg-teal-100 px-2 py-0.5 rounded-full border border-teal-200">Medical Board</span>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-semibold uppercase tracking-wider text-teal-700 mb-2">Phone Number</label>
-                      <input
-                        type="tel"
-                        name="phone"
-                        value={formData.phone}
-                        onChange={handleChange}
-                        placeholder="+8801712345678"
-                        className="w-full px-4 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-900 placeholder-slate-400 outline-none focus:border-teal-500 text-sm"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold uppercase tracking-wider text-teal-700 mb-2">BMDC / License No.</label>
-                      <input
-                        type="text"
-                        name="medicalLicenseNo"
-                        value={formData.medicalLicenseNo}
-                        onChange={handleChange}
-                        placeholder="MED-99201"
-                        className="w-full px-4 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-900 placeholder-slate-400 outline-none focus:border-teal-500 text-sm"
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Terms Checkbox */}
-              <div className="flex items-start gap-3 pt-2">
-                <input
-                  type="checkbox"
-                  id="agreeTerms"
-                  name="agreeTerms"
-                  checked={formData.agreeTerms}
-                  onChange={handleChange}
-                  className="mt-1 h-4 w-4 rounded border-slate-300 bg-white text-blue-600 focus:ring-blue-500"
-                />
-                <label htmlFor="agreeTerms" className="text-xs text-slate-500 leading-relaxed cursor-pointer">
-                  I agree to the <span className="text-blue-600 underline">Divided and Unpopular Healthcare Terms of Service</span> and acknowledge privacy protocols regarding medical dispatch logs.
-                </label>
               </div>
+            )}
 
+            {/* Terms Checkbox */}
+            <div className="flex items-start gap-3 pt-2">
+              <input
+                type="checkbox"
+                id="agreeTerms"
+                name="agreeTerms"
+                checked={formData.agreeTerms}
+                onChange={handleChange}
+                className="mt-1 h-4 w-4 rounded border-slate-300 bg-white text-blue-600 focus:ring-blue-500"
+              />
+              <label htmlFor="agreeTerms" className="text-xs text-slate-500 leading-relaxed cursor-pointer">
+                I agree to the <span className="text-blue-600 underline">Divided and Unpopular Healthcare Terms of Service</span> and acknowledge privacy protocols regarding medical dispatch logs.
+              </label>
             </div>
-          )}
+          </div>
 
           {/* Submit Action Button */}
           <button
             type="submit"
-            disabled={isSubmitting || (activeTab === 'REGISTER' && hasStartedTyping && (!isPasswordValid || !passwordsMatch))}
+            disabled={isSubmitting || (hasStartedTyping && (!isPasswordValid || !passwordsMatch))}
             className="w-full mt-4 py-3.5 px-4 rounded-xl bg-gradient-to-r from-blue-600 via-sky-500 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white font-extrabold transition duration-200 shadow-xl shadow-blue-500/25 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm uppercase tracking-wider"
           >
             {isSubmitting ? (
@@ -637,34 +530,20 @@ export default function RegisterPage() {
                 <span>Processing Request...</span>
               </>
             ) : (
-              <span>{activeTab === 'REGISTER' ? 'Create Account & Access Portal' : 'Authenticate & Sign In'}</span>
+              <span>Create Account & Access Portal</span>
             )}
           </button>
         </form>
 
         {/* Footer Link */}
         <p className="text-center text-xs sm:text-sm text-slate-500 mt-6">
-          {activeTab === 'REGISTER' ? (
-            <>
-              Already registered in the Divided and Unpopular Network?{' '}
-              <button
-                onClick={() => { setActiveTab('LOGIN'); setErrorMessage(''); }}
-                className="text-blue-600 font-bold hover:underline"
-              >
-                Sign in here
-              </button>
-            </>
-          ) : (
-            <>
-              Need a new account?{' '}
-              <button
-                onClick={() => { setActiveTab('REGISTER'); setErrorMessage(''); }}
-                className="text-blue-600 font-bold hover:underline"
-              >
-                Register as Patient, Donor, or Driver
-              </button>
-            </>
-          )}
+          Already registered in the Divided and Unpopular Network?{' '}
+          <Link
+            href="/login"
+            className="text-blue-600 font-bold hover:underline"
+          >
+            Sign in here
+          </Link>
         </p>
 
       </div>

@@ -16,7 +16,8 @@ app.use('/api/admin', require('./routes/admin'));
 app.use('/api/dashboard', require('./routes/dashboard'));
 app.use('/api/patient', require('./routes/patient'));
 app.use('/api/doctor', require('./routes/doctor')); 
-
+app.use('/api/donor', require('./routes/donor'));
+app.use('/api/driver', require('./routes/driver'));
 const PORT = process.env.PORT || 5001;
 
 app.listen(PORT, () => {

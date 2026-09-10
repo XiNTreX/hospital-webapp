@@ -8,6 +8,7 @@ export default function PatientLayout({ children }: { children: React.ReactNode 
   const pathname = usePathname();
   const router = useRouter();
   const [patientName, setPatientName] = useState('Patient');
+  const [isAuthorized, setIsAuthorized] = useState(false);
 
   useEffect(() => {
     // Check authentication token
@@ -15,6 +16,14 @@ export default function PatientLayout({ children }: { children: React.ReactNode 
     if (!token) {
       router.push('/login');
       return;
+    }
+
+    const role = localStorage.getItem('role');
+    if (role !== 'PATIENT') {
+      setIsAuthorized(false);
+      return;
+    } else {
+      setIsAuthorized(true);
     }
 
     // Load stored patient info if available
@@ -29,12 +38,27 @@ export default function PatientLayout({ children }: { children: React.ReactNode 
     }
   }, [router]);
 
-  const handleSignOut = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('userData');
-    router.push('/login');
-  };
+  
+  const handleSignOut = async () => {
+  const token = localStorage.getItem('token');
+  
+  if (token) {
+    try {
+      await fetch('http://localhost:5001/api/auth/logout', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+    } catch (err) {
+      console.error('Server logout failed, clearing local session anyway', err);
+    }
+  }
 
+  localStorage.removeItem('token');
+  localStorage.removeItem('role');
+  router.push('/login');
+};
   const navItems = [
     { label: 'Dashboard', href: '/patient/dashboard', icon: '📊' },
     { label: 'View Doctors List', href: '/patient/doctors', icon: '🩺' },
@@ -47,6 +71,28 @@ export default function PatientLayout({ children }: { children: React.ReactNode 
     { label: 'Past Ambulance Requests', href: '/patient/ambulance-requests', icon: '🚑' },
     { label: 'Admission History', href: '/patient/admissions', icon: '🏥' },
   ];
+
+  if (!isAuthorized) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#EAF2F8] p-4">
+        <div className="max-w-md w-full bg-white p-8 rounded-3xl shadow-xl border border-rose-100 text-center space-y-4">
+          <div className="w-16 h-16 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto text-3xl">
+            🔒
+          </div>
+          <h2 className="text-2xl font-black text-slate-900">Access Denied</h2>
+          <p className="text-slate-500 font-medium text-sm">
+            Your current account role does not have permission to view the Patient Portal.
+          </p>
+          <button 
+            onClick={() => router.push('/login')} 
+            className="mt-6 w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition"
+          >
+            Return to Login
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#EAF2F8] text-slate-800 font-sans flex flex-col relative overflow-x-hidden">

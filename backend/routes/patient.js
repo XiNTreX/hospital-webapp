@@ -224,9 +224,6 @@ router.put('/appointments/:id/cancel', verifyToken, async (req, res) => {
 // ==========================================
 // POST /api/patient/appointments/book
 // ==========================================
-// ==========================================
-// POST /api/patient/appointments/book
-// ==========================================
 router.post('/appointments/book', verifyToken, async (req, res) => {
   const client = await pool.connect();
   try {
@@ -261,14 +258,33 @@ router.post('/appointments/book', verifyToken, async (req, res) => {
     );
     
     if (patientResult.rows.length === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Patient not found' });
     }
     const patientId = patientResult.rows[0].patient_id;
     
+    // ----------------------------------------------------
+    // NEW CHECK: Prevent duplicate active appointment with the same doctor
+    // ----------------------------------------------------
+    const existingAppointment = await client.query(
+      `SELECT appointment_id FROM "APPOINTMENT"
+       WHERE patient_id = $1 AND doctor_id = $2 AND status = 'Scheduled'`,
+      [patientId, parseInt(doctorId)]
+    );
+
+    if (existingAppointment.rows.length > 0) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ 
+        error: 'You already have an active appointment scheduled with this doctor. Please cancel or reschedule your existing appointment before booking a new one.' 
+      });
+    }
+    // ----------------------------------------------------
+
     // Check if the session is available
     const { isSessionAvailable, getNextSerial } = require('../utils/schedule');
     const available = await isSessionAvailable(parseInt(doctorId), date, time, pool);
     if (!available) {
+      await client.query('ROLLBACK');
       return res.status(409).json({ error: 'This session is fully booked. Please choose another time.' });
     }
     
@@ -297,19 +313,16 @@ router.post('/appointments/book', verifyToken, async (req, res) => {
   } finally {
     client.release();
   }
-});
-// ==========================================
+});// ==========================================
 // GET /api/patient/tests
 // ==========================================
 router.get('/tests', verifyToken, async (req, res) => {
   try {
-    const result = await pool.query(
-      `SELECT test_id, name, cost FROM "TEST" ORDER BY name`
-    );
+    const result = await pool.query('SELECT * FROM "TEST" ORDER BY name');
     res.json(result.rows);
   } catch (err) {
-    console.error('Tests error:', err);
-    res.status(500).json({ error: 'Server error' });
+    console.error('Fetch tests error:', err);
+    res.status(500).json({ error: 'Failed to fetch medical tests' });
   }
 });
 // ==========================================

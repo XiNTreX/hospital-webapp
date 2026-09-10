@@ -28,6 +28,7 @@ router.get('/profile', verifyToken, async (req, res) => {
 // ==========================================
 router.get('/appointments', verifyToken, async (req, res) => {
   try {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     const result = await pool.query(
       `SELECT 
          a.appointment_id, 

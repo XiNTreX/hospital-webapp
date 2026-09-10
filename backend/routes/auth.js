@@ -3,6 +3,8 @@ const router = express.Router();
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const pool = require('../config/db');
+
+const verifyToken = require('../middleware/auth');
 require('dotenv').config();
 
 // POST: /api/auth/register
@@ -112,5 +114,23 @@ router.post('/login', async (req, res) => {
     res.status(500).json({ error: 'Server error during login.' });
   }
 });
+// POST /api/auth/logout
+router.post('/logout', verifyToken, async (req, res) => {
+  try {
+    // Extract the token from the header (verifyToken already confirmed it exists)
+    const authHeader = req.headers['authorization'];
+    const token = authHeader.split(' ')[1];
 
+    // Insert token into the blacklist table
+    await pool.query(
+      `INSERT INTO "TOKEN_BLACKLIST" (token) VALUES ($1) ON CONFLICT DO NOTHING`,
+      [token]
+    );
+
+    res.json({ message: 'Logged out successfully' });
+  } catch (err) {
+    console.error('Logout error:', err);
+    res.status(500).json({ error: 'Server error during logout' });
+  }
+});
 module.exports = router;

@@ -1,45 +1,74 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
-export default function TestList() {
-  const [tests, setTests] = useState<any[]>([]);
+interface TestItem {
+  test_id: number;
+  name: string;
+  cost: string;
+}
+
+export default function TestsPage() {
+  const [tests, setTests] = useState<TestItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    const fetchTests = async () => {
+      const token = localStorage.getItem('token');
+      try {
+        const response = await fetch('http://localhost:5001/api/patient/tests', {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        const data = await response.json();
+        
+        if (response.ok) {
+          setTests(data);
+        } else {
+          setError(data.error || 'Failed to load test catalog.');
+        }
+      } catch (err) {
+        setError('Server connection error. Ensure the backend is running.');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchTests();
+  }, []);
+
+  if (isLoading) {
+    return (
+      <div className="flex h-64 items-center justify-center">
+        <div className="animate-spin h-8 w-8 border-4 border-blue-500 border-t-transparent rounded-full"></div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-4 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl font-medium">
+        {error}
+      </div>
+    );
+  }
 
   return (
-    <div className="p-10">
-      <h1 className="text-3xl font-bold text-gray-900 mb-2">Available Diagnostic Tests</h1>
-      <p className="text-gray-500 mb-8">Browse the laboratory and imaging services available at our facility.</p>
+    <div className="space-y-6">
+      <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
+        <h2 className="text-2xl font-black text-slate-900">Diagnostic Tests Catalog</h2>
+        <p className="text-slate-500 text-sm mt-1">Browse all available medical tests and imaging services.</p>
+      </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-        <table className="min-w-full text-left text-sm whitespace-nowrap">
-          <thead className="bg-gray-50 border-b border-gray-100">
-            <tr>
-              <th className="px-6 py-4 font-semibold text-gray-600">Test Code</th>
-              <th className="px-6 py-4 font-semibold text-gray-600">Test Name</th>
-              <th className="px-6 py-4 font-semibold text-gray-600">Department</th>
-              <th className="px-6 py-4 font-semibold text-gray-600">Price (BDT)</th>
-              <th className="px-6 py-4 font-semibold text-gray-600">Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {tests.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="px-6 py-12 text-center">
-                  <div className="flex flex-col items-center justify-center">
-                    <span className="text-3xl mb-3">🧪</span>
-                    <p className="text-gray-500 font-medium">Loading test catalog...</p>
-                  </div>
-                </td>
-              </tr>
-            ) : (
-              tests.map((test, index) => (
-                <tr key={index}>
-                  {/* Map data here */}
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+        {tests.map((test) => (
+          <div key={test.test_id} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-blue-300 transition-all flex justify-between items-center">
+            <h3 className="text-base font-bold text-slate-900">{test.name}</h3>
+            <span className="text-emerald-600 font-black text-lg ml-4">৳{test.cost}</span>
+          </div>
+        ))}
       </div>
     </div>
   );

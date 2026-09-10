@@ -1,15 +1,54 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 
 export default function DoctorLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+  const [isAuthorized, setIsAuthorized] = useState(false);
 
-  const handleLogout = () => {
+  useEffect(() => {
+    // Check authentication token
+    const token = localStorage.getItem('token');
+    if (!token) {
+      router.push('/login');
+      return;
+    }
+
+    // Check role authorization
+    const role = localStorage.getItem('role');
+    if (role !== 'DOCTOR') {
+      setIsAuthorized(false);
+      return;
+    } else {
+      setIsAuthorized(true);
+    }
+  }, [router]);
+
+  const handleLogout = async () => {
+    const token = localStorage.getItem('token');
+    
+    if (token) {
+      try {
+        // Invalidate token on the server
+        await fetch('http://localhost:5001/api/auth/logout', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+      } catch (err) {
+        console.error('Server logout failed, clearing local session anyway', err);
+      }
+    }
+
+    // Clear frontend state
     localStorage.removeItem('token');
     localStorage.removeItem('role');
+    
+    // Redirect to login
     router.push('/login');
   };
 
@@ -19,6 +58,28 @@ export default function DoctorLayout({ children }: { children: React.ReactNode }
     { name: 'Patient Records', path: '/doctor/patients', icon: '🗂️' },
     { name: 'Test Reviews', path: '/doctor/tests', icon: '🔬' },
   ];
+
+  if (!isAuthorized) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
+        <div className="max-w-md w-full bg-white p-8 rounded-3xl shadow-xl border border-rose-100 text-center space-y-4">
+          <div className="w-16 h-16 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto text-3xl">
+            🔒
+          </div>
+          <h2 className="text-2xl font-black text-slate-900">Access Denied</h2>
+          <p className="text-slate-500 font-medium text-sm">
+            Your current account role does not have permission to view the Doctor Portal.
+          </p>
+          <button 
+            onClick={() => router.push('/login')} 
+            className="mt-6 w-full px-4 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl transition"
+          >
+            Return to Login
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen bg-slate-50">
