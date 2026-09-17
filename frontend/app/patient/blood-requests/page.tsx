@@ -2,11 +2,13 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-
+import { formatDateDhaka } from '../../utils/dhakaDate';
 interface BloodRequest {
   request_id: number;
   blood_group_needed: string;
   units_needed: number;
+  units_pledged: number;
+  units_fulfilled: number;
   request_date: string;
   need_date: string;
   status: string;
@@ -39,7 +41,7 @@ export default function BloodRequestsHistory() {
       const res = await fetch('http://localhost:5001/api/patient/blood-requests', {
         headers: { Authorization: `Bearer ${token}` },
       });
-      
+
       if (res.ok) {
         const data = await res.json();
         setRequests(data);
@@ -58,20 +60,20 @@ export default function BloodRequestsHistory() {
   const handleCancel = async (requestId: number) => {
     setCancellingId(requestId);
     setError('');
-    
+
     try {
       const token = localStorage.getItem('token');
       const res = await fetch(`http://localhost:5001/api/patient/blood-requests/${requestId}/cancel`, {
         method: 'PUT',
         headers: { Authorization: `Bearer ${token}` },
       });
-      
+
       const data = await res.json();
-      
+
       if (res.ok) {
         // Update the request status in the list
-        setRequests(prev => prev.map(req => 
-          req.request_id === requestId 
+        setRequests(prev => prev.map(req =>
+          req.request_id === requestId
             ? { ...req, status: 'Cancelled' }
             : req
         ));
@@ -87,17 +89,17 @@ export default function BloodRequestsHistory() {
     }
   };
 
-  const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr);
-    return date.toLocaleDateString('en-US', { 
-      year: 'numeric', 
-      month: 'short', 
-      day: 'numeric' 
-    });
-  };
+  // const formatDate = (dateStr: string) => {
+  //   const date = new Date(dateStr);
+  //   return date.toLocaleDateString('en-US', {
+  //     year: 'numeric',
+  //     month: 'short',
+  //     day: 'numeric'
+  //   });
+  // };
 
   const getStatusBadge = (status: string) => {
-    switch(status) {
+    switch (status) {
       case 'Pending':
         return 'bg-amber-100 text-amber-700 border-amber-200';
       case 'Confirmed':
@@ -148,7 +150,7 @@ export default function BloodRequestsHistory() {
           <span className="text-4xl block mb-4">🩸</span>
           <h3 className="text-lg font-bold text-gray-900">No blood requests yet</h3>
           <p className="text-slate-500 text-sm mt-1">You haven't submitted any blood requests.</p>
-          <button 
+          <button
             onClick={() => router.push('/patient/blood-requests/new')}
             className="mt-4 px-6 py-2 bg-rose-600 text-white rounded-xl text-sm font-bold hover:bg-rose-700 transition"
           >
@@ -158,21 +160,19 @@ export default function BloodRequestsHistory() {
       ) : (
         <div className="space-y-4">
           {requests.map((req) => (
-            <div 
-              key={req.request_id} 
-              className={`bg-white rounded-2xl border p-5 shadow-sm hover:shadow-md transition ${
-                req.status === 'Cancelled' 
-                  ? 'border-rose-200 bg-rose-50/30' 
+            <div
+              key={req.request_id}
+              className={`bg-white rounded-2xl border p-5 shadow-sm hover:shadow-md transition ${req.status === 'Cancelled'
+                  ? 'border-rose-200 bg-rose-50/30'
                   : 'border-slate-200'
-              }`}
+                }`}
             >
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="flex items-center gap-4">
-                  <div className={`w-12 h-12 rounded-full flex items-center justify-center text-xl font-bold ${
-                    req.status === 'Cancelled'
+                  <div className={`w-12 h-12 rounded-full flex items-center justify-center text-xl font-bold ${req.status === 'Cancelled'
                       ? 'bg-rose-100 text-rose-400'
                       : 'bg-rose-100 text-rose-600'
-                  }`}>
+                    }`}>
                     {req.blood_group_needed}
                   </div>
                   <div>
@@ -186,12 +186,32 @@ export default function BloodRequestsHistory() {
                     </div>
                     <p className="text-sm text-slate-600">
                       {req.units_needed} unit{req.units_needed > 1 ? 's' : ''} needed
+                      {req.units_fulfilled > 0 && req.status !== 'Cancelled' && (
+                        <span className="ml-2 text-xs text-emerald-600 font-semibold">
+                          · {req.units_fulfilled} fulfilled
+                        </span>
+                      )}
+                      {req.units_pledged > req.units_fulfilled && req.status !== 'Cancelled' && (
+                        <span className="ml-2 text-xs text-amber-600 font-semibold">
+                          · {req.units_pledged - req.units_fulfilled} pledged
+                        </span>
+                      )}
                     </p>
+                    {req.units_needed > 0 && req.status !== 'Cancelled' && (
+                      <div className="mt-2 h-1.5 w-40 bg-slate-100 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-gradient-to-r from-rose-600 to-pink-500 transition-all"
+                          style={{ width: `${Math.min(100, Math.round((req.units_fulfilled / req.units_needed) * 100))}%` }}
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div className="text-right text-sm text-slate-500">
-                  <p>Requested: {formatDate(req.request_date)}</p>
-                  <p>Needed by: {formatDate(req.need_date)}</p>
+                  {/* <p>Requested: {formatDate(req.request_date)}</p>
+                  <p>Needed by: {formatDate(req.need_date)}</p> */}
+                  {formatDateDhaka(req.request_date)}
+                  {formatDateDhaka(req.need_date)}
                 </div>
               </div>
 
@@ -202,15 +222,25 @@ export default function BloodRequestsHistory() {
               )}
 
               {/* Status-specific actions */}
-              {req.status === 'Pending' && (
+              {/* Status-specific actions */}
+              {req.status === 'Pending' && req.units_pledged === 0 && (
                 <div className="mt-3 pt-3 border-t border-slate-100 flex gap-2">
-                  <button 
+                  <button
                     onClick={() => setShowConfirmModal(req.request_id)}
                     disabled={cancellingId === req.request_id}
                     className="flex-1 py-2 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 text-xs font-medium transition disabled:opacity-50"
                   >
                     {cancellingId === req.request_id ? 'Cancelling...' : 'Cancel Request'}
                   </button>
+                </div>
+              )}
+
+              {/* Pledged: block cancellation */}
+              {req.status === 'Pending' && req.units_pledged > 0 && (
+                <div className="mt-3 p-3 bg-amber-50 rounded-xl border border-amber-100">
+                  <p className="text-sm text-amber-700 flex items-center gap-2">
+                    <span>🤝</span> {req.units_pledged} donor{req.units_pledged > 1 ? 's have' : ' has'} pledged. Cancellation is locked.
+                  </p>
                 </div>
               )}
 

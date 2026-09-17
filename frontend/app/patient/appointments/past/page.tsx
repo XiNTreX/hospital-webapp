@@ -1,5 +1,6 @@
 'use client';
 
+import { formatDateDhaka } from '../../../utils/dhakaDate';
 import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -35,10 +36,10 @@ export default function PastAppointmentsPage() {
     fetchPastAppointments();
   }, []);
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
-  };
+  // const formatDate = (dateString: string) => {
+  //   const date = new Date(dateString);
+  //   return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+  // };
 
   const formatTime = (timeString: string) => {
     const [hours, minutes] = timeString.split(':');
@@ -102,7 +103,8 @@ export default function PastAppointmentsPage() {
                 <div className="space-y-2 text-sm text-slate-600 border-t border-slate-100 pt-4 mb-4">
                   <div className="flex items-center gap-2">
                     <span>📅</span>
-                    <span>{formatDate(apt.date)}</span>
+                    {/* <span>{formatDate(apt.date)}</span> */}
+                    <span>{formatDateDhaka(apt.date)}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <span>⏰</span>

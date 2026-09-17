@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { formatDateTimeDhaka } from '../../utils/dhakaDate';
 
 interface AmbulanceRequest {
   request_id: number;
@@ -85,16 +86,16 @@ export default function AmbulanceRequestsHistory() {
     }
   };
 
-  const formatDateTime = (dateStr: string) => {
-    const date = new Date(dateStr);
-    return date.toLocaleString('en-US', { 
-      year: 'numeric', 
-      month: 'short', 
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
+  // const formatDateTime = (dateStr: string) => {
+  //   const date = new Date(dateStr);
+  //   return date.toLocaleString('en-US', { 
+  //     year: 'numeric', 
+  //     month: 'short', 
+  //     day: 'numeric',
+  //     hour: '2-digit',
+  //     minute: '2-digit'
+  //   });
+  // };
 
   const getStatusBadge = (status: string) => {
     switch(status) {
@@ -207,7 +208,8 @@ export default function AmbulanceRequestsHistory() {
                   </div>
                 </div>
                 <div className="text-right text-sm text-slate-500">
-                  <p>Requested: {formatDateTime(req.request_time)}</p>
+                 {/* <p>Requested: {formatDateTime(req.request_time)}</p> */}
+                 {formatDateTimeDhaka(req.request_time)}
                 </div>
               </div>
 

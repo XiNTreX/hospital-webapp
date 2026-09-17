@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../config/db');
 const verifyToken = require('../middleware/auth');
+const { todayDhaka } = require('../utils/dhakaTime');
 
 // ==========================================
 // GET /api/patient/profile
@@ -9,7 +10,7 @@ const verifyToken = require('../middleware/auth');
 router.get('/profile', verifyToken, async (req, res) => {
   try {
     const { accountId } = req.user;
-    
+
     const result = await pool.query(
       `SELECT p.first_name, p.last_name, p.dob, p.gender, p.phone, p.blood_group, p.address,
               u.email
@@ -18,11 +19,11 @@ router.get('/profile', verifyToken, async (req, res) => {
        WHERE p.account_id = $1`,
       [accountId]
     );
-    
+
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Patient profile not found' });
     }
-    
+
     res.json(result.rows[0]);
   } catch (err) {
     console.error('Profile error:', err);
@@ -37,7 +38,7 @@ router.put('/profile', verifyToken, async (req, res) => {
   try {
     const { accountId } = req.user;
     const { first_name, last_name, dob, gender, phone, blood_group, address } = req.body;
-    
+
     await pool.query(
       `UPDATE "PATIENT" 
        SET first_name = $1, last_name = $2, dob = $3, gender = $4, 
@@ -45,7 +46,7 @@ router.put('/profile', verifyToken, async (req, res) => {
        WHERE account_id = $8`,
       [first_name, last_name, dob, gender, phone, blood_group, address, accountId]
     );
-    
+
     res.json({ message: 'Profile updated successfully' });
   } catch (err) {
     console.error('Update error:', err);
@@ -78,30 +79,30 @@ router.get('/doctors', verifyToken, async (req, res) => {
 router.get('/appointments/slots', verifyToken, async (req, res) => {
   try {
     const { doctorId, date } = req.query;
-    
+
     // Validate inputs
     if (!doctorId || !date) {
       return res.status(400).json({ error: 'doctorId and date are required' });
     }
-    
+
     // Check if date is valid and within 1 month
     const selectedDate = new Date(date);
     const today = new Date();
-    today.setHours(0,0,0,0);
+    today.setHours(0, 0, 0, 0);
     const maxDate = new Date(today);
     maxDate.setMonth(maxDate.getMonth() + 1);
-    
+
     if (selectedDate < today) {
       return res.status(400).json({ error: 'Cannot book appointments in the past' });
     }
     if (selectedDate > maxDate) {
       return res.status(400).json({ error: 'Bookings only allowed up to 1 month in advance' });
     }
-    
+
     // Get available sessions
     const { getAvailableSessions } = require('../utils/schedule');
     const sessions = await getAvailableSessions(parseInt(doctorId), date, pool);
-    
+
     res.json({
       doctorId: parseInt(doctorId),
       date,
@@ -119,8 +120,8 @@ router.get('/appointments/slots', verifyToken, async (req, res) => {
 router.get('/appointments/pending', verifyToken, async (req, res) => {
   try {
     const { accountId } = req.user;
-    const today = new Date().toISOString().split('T')[0];
-    
+    const today = todayDhaka();
+
     const result = await pool.query(
       `SELECT a.appointment_id, a.date, a.time, a.serial_no, a.status,
               a.doctor_id,  -- 👈 ADD THIS
@@ -151,7 +152,7 @@ router.get('/appointments/pending', verifyToken, async (req, res) => {
 router.get('/appointments/past', verifyToken, async (req, res) => {
   try {
     const { accountId } = req.user;
-    
+
     const result = await pool.query(
       `SELECT a.appointment_id, a.date, a.time, a.serial_no, a.status,
               a.doctor_id,
@@ -178,7 +179,7 @@ router.put('/appointments/:id/cancel', verifyToken, async (req, res) => {
   try {
     const { accountId } = req.user;
     const appointmentId = parseInt(req.params.id);
-    
+
     // First, verify this appointment belongs to this patient
     const checkResult = await pool.query(
       `SELECT a.appointment_id, a.status, a.date
@@ -187,35 +188,35 @@ router.put('/appointments/:id/cancel', verifyToken, async (req, res) => {
        WHERE a.appointment_id = $1 AND p.account_id = $2`,
       [appointmentId, accountId]
     );
-    
+
     if (checkResult.rows.length === 0) {
       return res.status(404).json({ error: 'Appointment not found' });
     }
-    
+
     const appointment = checkResult.rows[0];
-    
+
     // Check if appointment is already past
-    const today = new Date().toISOString().split('T')[0];
+    const today = todayDhaka();
     if (appointment.date < today) {
       return res.status(400).json({ error: 'Cannot cancel past appointments' });
     }
-    
+
     // Check if already cancelled
     if (appointment.status === 'Cancelled') {
       return res.status(400).json({ error: 'Appointment is already cancelled' });
     }
-    
+
     // Update status to Cancelled
     await pool.query(
       `UPDATE "APPOINTMENT" SET status = 'Cancelled' WHERE appointment_id = $1`,
       [appointmentId]
     );
-    
-    res.json({ 
+
+    res.json({
       message: 'Appointment cancelled successfully',
       appointment_id: appointmentId
     });
-    
+
   } catch (err) {
     console.error('Cancel appointment error:', err);
     res.status(500).json({ error: 'Server error' });
@@ -229,40 +230,40 @@ router.post('/appointments/book', verifyToken, async (req, res) => {
   try {
     const { accountId } = req.user;
     const { doctorId, date, time } = req.body;
-    
+
     // Validate inputs
     if (!doctorId || !date || !time) {
       return res.status(400).json({ error: 'doctorId, date, and time are required' });
     }
-    
+
     // Check date validity (not past, not > 1 month)
     const selectedDate = new Date(date);
     const today = new Date();
-    today.setHours(0,0,0,0);
+    today.setHours(0, 0, 0, 0);
     const maxDate = new Date(today);
     maxDate.setMonth(maxDate.getMonth() + 1);
-    
+
     if (selectedDate < today) {
       return res.status(400).json({ error: 'Cannot book appointments in the past' });
     }
     if (selectedDate > maxDate) {
       return res.status(400).json({ error: 'Bookings only allowed up to 1 month in advance' });
     }
-    
+
     await client.query('BEGIN');
-    
+
     // Get patient_id from account_id
     const patientResult = await client.query(
       `SELECT patient_id FROM "PATIENT" WHERE account_id = $1`,
       [accountId]
     );
-    
+
     if (patientResult.rows.length === 0) {
       await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Patient not found' });
     }
     const patientId = patientResult.rows[0].patient_id;
-    
+
     // ----------------------------------------------------
     // NEW CHECK: Prevent duplicate active appointment with the same doctor
     // ----------------------------------------------------
@@ -274,8 +275,8 @@ router.post('/appointments/book', verifyToken, async (req, res) => {
 
     if (existingAppointment.rows.length > 0) {
       await client.query('ROLLBACK');
-      return res.status(400).json({ 
-        error: 'You already have an active appointment scheduled with this doctor. Please cancel or reschedule your existing appointment before booking a new one.' 
+      return res.status(400).json({
+        error: 'You already have an active appointment scheduled with this doctor. Please cancel or reschedule your existing appointment before booking a new one.'
       });
     }
     // ----------------------------------------------------
@@ -287,20 +288,20 @@ router.post('/appointments/book', verifyToken, async (req, res) => {
       await client.query('ROLLBACK');
       return res.status(409).json({ error: 'This session is fully booked. Please choose another time.' });
     }
-    
+
     // Get next serial number
     const serialNo = await getNextSerial(parseInt(doctorId), date, pool);
-    
+
     // Insert appointment
     await client.query(
       `INSERT INTO "APPOINTMENT" (date, time, serial_no, status, doctor_id, patient_id)
        VALUES ($1, $2, $3, 'Scheduled', $4, $5)`,
       [date, time, serialNo, parseInt(doctorId), patientId]
     );
-    
+
     await client.query('COMMIT');
-    res.status(201).json({ 
-      message: 'Appointment booked successfully', 
+    res.status(201).json({
+      message: 'Appointment booked successfully',
       serialNo,
       date,
       time,
@@ -340,16 +341,17 @@ router.put('/appointments/:id/reschedule', verifyToken, async (req, res) => {
     }
 
     // Validate date validity (not past, not > 1 month)
-    const selectedDate = new Date(date);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const maxDate = new Date(today);
-    maxDate.setMonth(maxDate.getMonth() + 1);
+    const { todayDhaka, daysBetween, oneMonthFromTodayDhaka } = require('../utils/dhakaTime');
 
-    if (selectedDate < today) {
-      return res.status(400).json({ error: 'Cannot reschedule appointments to the past' });
+    const today = todayDhaka();
+    const maxDate = oneMonthFromTodayDhaka();
+
+    if (daysBetween(today, date) > 0) {
+      // date is BEFORE today
+      return res.status(400).json({ error: 'Cannot book appointments in the past' });
     }
-    if (selectedDate > maxDate) {
+    if (daysBetween(date, maxDate) > 0) {
+      // date is AFTER maxDate
       return res.status(400).json({ error: 'Bookings only allowed up to 1 month in advance' });
     }
 
@@ -392,7 +394,7 @@ router.put('/appointments/:id/reschedule', verifyToken, async (req, res) => {
     );
 
     await client.query('COMMIT');
-    res.json({ 
+    res.json({
       message: 'Appointment rescheduled successfully',
       appointment_id: appointmentId,
       date,
@@ -413,7 +415,7 @@ router.put('/appointments/:id/reschedule', verifyToken, async (req, res) => {
 router.get('/reports/pending', verifyToken, async (req, res) => {
   try {
     const { accountId } = req.user;
-    
+
     const result = await pool.query(
       `SELECT tr.report_id, t.name as test_name, tr.date, tr.status,
               d.first_name as doctor_first, d.last_name as doctor_last
@@ -438,7 +440,7 @@ router.get('/reports/pending', verifyToken, async (req, res) => {
 router.get('/reports/past', verifyToken, async (req, res) => {
   try {
     const { accountId } = req.user;
-    
+
     const result = await pool.query(
       `SELECT tr.report_id, t.name as test_name, tr.date, tr.result, tr.status,
               d.first_name as doctor_first, d.last_name as doctor_last
@@ -466,11 +468,12 @@ router.get('/reports/past', verifyToken, async (req, res) => {
 router.get('/blood-requests', verifyToken, async (req, res) => {
   try {
     const { accountId } = req.user;
-    
+
     const result = await pool.query(
       `SELECT br.request_id, br.blood_group_needed, br.units_needed, 
-              br.request_date, br.need_date, br.status, br.patient_notes,
-              p.first_name, p.last_name
+       br.units_pledged, br.units_fulfilled,
+       br.request_date, br.need_date, br.status, br.patient_notes,
+       p.first_name, p.last_name
        FROM "BLOOD_REQUEST" br
        JOIN "PATIENT" p ON br.patient_id = p.patient_id
        WHERE p.account_id = $1
@@ -490,42 +493,46 @@ router.put('/blood-requests/:id/cancel', verifyToken, async (req, res) => {
   try {
     const { accountId } = req.user;
     const requestId = parseInt(req.params.id);
-    
-    // First, verify this blood request belongs to this patient
+
+    // Verify this blood request belongs to this patient
     const checkResult = await pool.query(
-      `SELECT br.request_id, br.status
+      `SELECT br.request_id, br.status, br.units_pledged
        FROM "BLOOD_REQUEST" br
        JOIN "PATIENT" p ON br.patient_id = p.patient_id
        WHERE br.request_id = $1 AND p.account_id = $2`,
       [requestId, accountId]
     );
-    
+
     if (checkResult.rows.length === 0) {
       return res.status(404).json({ error: 'Blood request not found' });
     }
-    
-    const request = checkResult.rows[0];
-    
-    // Check if already cancelled or confirmed
-    if (request.status === 'Cancelled') {
+
+    const r = checkResult.rows[0];
+
+    if (r.status === 'Cancelled') {
       return res.status(400).json({ error: 'Request is already cancelled' });
     }
-    
-    if (request.status === 'Confirmed' || request.status === 'Fulfilled') {
-      return res.status(400).json({ error: 'Cannot cancel a request that has already been confirmed' });
+    if (r.status === 'Fulfilled') {
+      return res.status(400).json({ error: 'Request is already fulfilled' });
     }
-    
-    // Update status to Cancelled
+    if (r.status === 'Expired') {
+      return res.status(400).json({ error: 'Request has expired' });
+    }
+    if (r.units_pledged > 0) {
+      return res.status(400).json({
+        error: `${r.units_pledged} donation(s) already pledged by donors. Contact support to cancel.`
+      });
+    }
+
     await pool.query(
       `UPDATE "BLOOD_REQUEST" SET status = 'Cancelled' WHERE request_id = $1`,
       [requestId]
     );
-    
-    res.json({ 
+
+    res.json({
       message: 'Blood request cancelled successfully',
       request_id: requestId
     });
-    
   } catch (err) {
     console.error('Cancel blood request error:', err);
     res.status(500).json({ error: 'Server error' });
@@ -538,35 +545,35 @@ router.post('/blood-requests', verifyToken, async (req, res) => {
   try {
     const { accountId } = req.user;
     const { bloodGroup, units, needDate, patientNotes } = req.body;
-    
+
     // Validate inputs
     if (!bloodGroup || !units || !needDate) {
       return res.status(400).json({ error: 'Blood group, units, and need date are required' });
     }
-    
+
     // Validate units (minimum 1, maximum 5 per request)
     if (units < 1 || units > 5) {
       return res.status(400).json({ error: 'Units must be between 1 and 5' });
     }
-    
+
     // Validate date (cannot be in the past)
-    const today = new Date().toISOString().split('T')[0];
+    const today = todayDhaka();
     if (needDate < today) {
       return res.status(400).json({ error: 'Need date cannot be in the past' });
     }
-    
+
     // Get patient_id from account_id
     const patientResult = await pool.query(
       `SELECT patient_id FROM "PATIENT" WHERE account_id = $1`,
       [accountId]
     );
-    
+
     if (patientResult.rows.length === 0) {
       return res.status(404).json({ error: 'Patient not found' });
     }
-    
+
     const patientId = patientResult.rows[0].patient_id;
-    
+
     // Insert blood request with status 'Pending'
     const result = await pool.query(
       `INSERT INTO "BLOOD_REQUEST" 
@@ -575,13 +582,13 @@ router.post('/blood-requests', verifyToken, async (req, res) => {
        RETURNING request_id, request_date`,
       [bloodGroup, units, needDate, patientId, patientNotes || '']
     );
-    
-    res.status(201).json({ 
+
+    res.status(201).json({
       message: 'Blood request submitted successfully',
       request_id: result.rows[0].request_id,
       request_date: result.rows[0].request_date
     });
-    
+
   } catch (err) {
     console.error('Blood request error:', err);
     res.status(500).json({ error: 'Server error' });
@@ -595,7 +602,7 @@ router.post('/blood-requests', verifyToken, async (req, res) => {
 router.get('/ambulance-requests', verifyToken, async (req, res) => {
   try {
     const { accountId } = req.user;
-    
+
     const result = await pool.query(
       `SELECT ar.request_id, ar.pickup_location, ar.drop_location, 
               ar.request_time, ar.status, ar.patient_notes,
@@ -620,24 +627,24 @@ router.post('/ambulance-requests', verifyToken, async (req, res) => {
   try {
     const { accountId } = req.user;
     const { pickupLocation, dropLocation, patientNotes } = req.body;
-    
+
     // Validate inputs
     if (!pickupLocation || !dropLocation) {
       return res.status(400).json({ error: 'Pickup and drop locations are required' });
     }
-    
+
     // Get patient_id from account_id
     const patientResult = await pool.query(
       `SELECT patient_id FROM "PATIENT" WHERE account_id = $1`,
       [accountId]
     );
-    
+
     if (patientResult.rows.length === 0) {
       return res.status(404).json({ error: 'Patient not found' });
     }
-    
+
     const patientId = patientResult.rows[0].patient_id;
-    
+
     // Insert ambulance request with status 'Pending'
     const result = await pool.query(
       `INSERT INTO "AMBULANCE_REQUEST" 
@@ -646,13 +653,13 @@ router.post('/ambulance-requests', verifyToken, async (req, res) => {
        RETURNING request_id, request_time`,
       [pickupLocation, dropLocation, patientId, patientNotes || '']
     );
-    
-    res.status(201).json({ 
+
+    res.status(201).json({
       message: 'Ambulance request submitted successfully',
       request_id: result.rows[0].request_id,
       request_time: result.rows[0].request_time
     });
-    
+
   } catch (err) {
     console.error('Ambulance request error:', err);
     res.status(500).json({ error: 'Server error' });
@@ -666,7 +673,7 @@ router.put('/ambulance-requests/:id/cancel', verifyToken, async (req, res) => {
   try {
     const { accountId } = req.user;
     const requestId = parseInt(req.params.id);
-    
+
     // Verify this request belongs to this patient
     const checkResult = await pool.query(
       `SELECT ar.request_id, ar.status
@@ -675,33 +682,31 @@ router.put('/ambulance-requests/:id/cancel', verifyToken, async (req, res) => {
        WHERE ar.request_id = $1 AND p.account_id = $2`,
       [requestId, accountId]
     );
-    
+
     if (checkResult.rows.length === 0) {
       return res.status(404).json({ error: 'Ambulance request not found' });
     }
-    
+
     const request = checkResult.rows[0];
-    
-    // Check if already cancelled or accepted
-    if (request.status === 'Cancelled') {
-      return res.status(400).json({ error: 'Request is already cancelled' });
+
+    if (request.status !== 'Pending') {
+      return res.status(400).json({
+        error: request.status === 'Cancelled'
+          ? 'Request is already cancelled'
+          : 'A driver has already accepted this ride. It can no longer be cancelled.'
+      });
     }
-    
-    if (request.status === 'Accepted' || request.status === 'En Route' || request.status === 'Completed') {
-      return res.status(400).json({ error: 'Cannot cancel a request that is already in progress' });
-    }
-    
     // Update status to Cancelled
     await pool.query(
       `UPDATE "AMBULANCE_REQUEST" SET status = 'Cancelled' WHERE request_id = $1`,
       [requestId]
     );
-    
-    res.json({ 
+
+    res.json({
       message: 'Ambulance request cancelled successfully',
       request_id: requestId
     });
-    
+
   } catch (err) {
     console.error('Cancel ambulance request error:', err);
     res.status(500).json({ error: 'Server error' });
@@ -714,7 +719,7 @@ router.put('/ambulance-requests/:id/cancel', verifyToken, async (req, res) => {
 router.get('/admissions', verifyToken, async (req, res) => {
   try {
     const { accountId } = req.user;
-    
+
     const result = await pool.query(
       `SELECT ipd.ipd_id, ipd.bed_number, ipd.type, ipd.fee_per_day,
               ipd.status, ipd.admission_date, ipd.discharge_date
