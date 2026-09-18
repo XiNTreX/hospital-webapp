@@ -12,8 +12,8 @@ app.use(express.json());
 
 // Mount API Routes
 app.use('/api/auth', require('./routes/auth'));
-app.use('/api/admin', require('./routes/admin'));
-app.use('/api/dashboard', require('./routes/dashboard'));
+const adminRoutes = require('./routes/admin');
+app.use('/api/admin', adminRoutes);app.use('/api/dashboard', require('./routes/dashboard'));
 app.use('/api/patient', require('./routes/patient'));
 app.use('/api/doctor', require('./routes/doctor')); 
 app.use('/api/donor', require('./routes/donor'));

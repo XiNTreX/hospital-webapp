@@ -48,7 +48,7 @@ export default function LoginPage() {
 
         setTimeout(() => {
           if (userRole === 'ADMIN') {
-            router.push('/admin');
+            router.push('/admin/dashboard');
           } else if (userRole === 'DOCTOR') {
             router.push('/doctor/dashboard');
           } else if (userRole === 'BLOOD_DONOR') {

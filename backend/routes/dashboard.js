@@ -3,8 +3,7 @@ const router = express.Router();
 const pool = require('../config/db');
 
 // Import the middleware we just created
-const verifyToken = require('../middleware/auth'); 
-
+const { verifyToken } = require('../middleware/auth');
 // GET: /api/dashboard/profile
 // Notice how `verifyToken` is passed as the second argument. 
 // Express will run the middleware first. If it succeeds, it runs the async function.

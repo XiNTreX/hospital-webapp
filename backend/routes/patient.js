@@ -1,8 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../config/db');
-const verifyToken = require('../middleware/auth');
-const { todayDhaka } = require('../utils/dhakaTime');
+const { verifyToken } = require('../middleware/auth');const { todayDhaka } = require('../utils/dhakaTime');
 
 // ==========================================
 // GET /api/patient/profile

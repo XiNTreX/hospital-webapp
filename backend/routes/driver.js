@@ -1,8 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../config/db');
-const verifyToken = require('../middleware/auth');
-
+const { verifyToken } = require('../middleware/auth');
 // ==========================================
 // Helper: get driver_id from JWT accountId
 // ==========================================

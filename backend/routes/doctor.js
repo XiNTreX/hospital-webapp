@@ -1,8 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../config/db');
-const verifyToken = require('../middleware/auth');
-
+const { verifyToken } = require('../middleware/auth');
 router.get('/profile', verifyToken, async (req, res) => {
   try {
     const result = await pool.query(
