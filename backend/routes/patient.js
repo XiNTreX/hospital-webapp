@@ -735,5 +735,134 @@ router.get('/admissions', verifyToken, async (req, res) => {
     res.status(500).json({ error: 'Server error' });
   }
 });
+// ==========================================
+// GET /api/patient/prescriptions/:appointmentId
+// ==========================================
+router.get('/prescriptions/:appointmentId', verifyToken, async (req, res) => {
+  try {
+    const { appointmentId } = req.params;
+    const { accountId } = req.user;
 
+    // 1. Get Base Prescription
+    const presRes = await pool.query(
+      `SELECT pr.*, d.first_name as doc_first, d.last_name as doc_last, d.specialization
+       FROM "PRESCRIPTION" pr
+       JOIN "DOCTOR" d ON pr.doctor_id = d.doctor_id
+       JOIN "PATIENT" p ON pr.patient_id = p.patient_id
+       WHERE pr.appointment_id = $1 AND p.account_id = $2`,
+      [appointmentId, accountId]
+    );
+
+    if (presRes.rows.length === 0) return res.status(404).json({ error: 'Prescription not found' });
+    const prescription = presRes.rows[0];
+
+    // 2. Get Medicines
+    const medRes = await pool.query(
+      `SELECT pm.frequency, pm.duration, pm.before_after_meal, m.name, m.dosage
+       FROM "PRESCRIPTION_MEDICINE" pm
+       JOIN "MEDICINE" m ON pm.medicine_id = m.medicine_id
+       WHERE pm.prescription_id = $1`,
+      [prescription.prescription_id]
+    );
+
+    // 3. Get Advised Tests (Matching patient, doctor, and date)
+    const testRes = await pool.query(
+      `SELECT t.name FROM "TEST_REPORT" tr
+       JOIN "TEST" t ON tr.test_id = t.test_id
+       WHERE tr.patient_id = $1 AND tr.doctor_id = $2 AND tr.date = $3`,
+      [prescription.patient_id, prescription.doctor_id, prescription.date]
+    );
+
+    res.json({
+      ...prescription,
+      medicines: medRes.rows,
+      tests: testRes.rows
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+// ==========================================
+// GET /api/patient/reports/past
+// ==========================================
+router.get('/reports/past', verifyToken, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT tr.report_id, tr.date, tr.result, 
+              t.name AS test_name, 
+              d.first_name AS doc_first, d.last_name AS doc_last, d.specialization
+       FROM "TEST_REPORT" tr
+       JOIN "TEST" t ON tr.test_id = t.test_id
+       JOIN "DOCTOR" d ON tr.doctor_id = d.doctor_id
+       JOIN "PATIENT" p ON tr.patient_id = p.patient_id
+       WHERE p.account_id = $1 AND tr.status = 'Completed'
+       ORDER BY tr.date DESC`,
+      [req.user.accountId]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error fetching past reports:', err);
+    res.status(500).json({ error: 'Server error fetching reports' });
+  }
+});
+// ==========================================
+// GET /api/patient/reports/pending
+// ==========================================
+router.get('/reports/pending', verifyToken, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT tr.report_id, tr.date, tr.status, 
+              t.name AS test_name, 
+              d.first_name AS doc_first, d.last_name AS doc_last
+       FROM "TEST_REPORT" tr
+       JOIN "TEST" t ON tr.test_id = t.test_id
+       JOIN "DOCTOR" d ON tr.doctor_id = d.doctor_id
+       JOIN "PATIENT" p ON tr.patient_id = p.patient_id
+       WHERE p.account_id = $1 AND tr.status IN ('Pending', 'Prescribed', 'Specimen Received')
+       ORDER BY tr.date DESC`,
+      [req.user.accountId]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error fetching pending reports:', err);
+    res.status(500).json({ error: 'Server error fetching pending reports' });
+  }
+});
+
+// ==========================================
+// POST /api/patient/reports/submit-specimen
+// ==========================================
+router.post('/reports/submit-specimen', verifyToken, async (req, res) => {
+  try {
+    const { report_id } = req.body;
+    await pool.query(
+      `UPDATE "TEST_REPORT" SET status = 'Specimen Received' WHERE report_id = $1`,
+      [report_id]
+    );
+    res.json({ message: 'Specimen submitted successfully' });
+  } catch (err) {
+    console.error('Error submitting specimen:', err);
+    res.status(500).json({ error: 'Server error submitting specimen' });
+  }
+});
+// ==========================================
+// GET /api/patient/reports/:reportId/details
+// ==========================================
+router.get('/reports/:reportId/details', verifyToken, async (req, res) => {
+  try {
+    const { reportId } = req.params;
+    const result = await pool.query(
+      `SELECT tp.parameter_name, tp.normal_range, trd.result_value
+       FROM "TEST_REPORT_DETAIL" trd
+       JOIN "TEST_PARAMETER" tp ON trd.parameter_id = tp.parameter_id
+       WHERE trd.report_id = $1`,
+      [reportId]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error fetching report details:', err);
+    res.status(500).json({ error: 'Server error fetching details' });
+  }
+});
 module.exports = router;

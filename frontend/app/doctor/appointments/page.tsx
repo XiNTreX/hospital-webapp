@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 
 export default function DoctorAppointmentsPage() {
   const [appointments, setAppointments] = useState<any[]>([]);
@@ -49,6 +50,7 @@ export default function DoctorAppointmentsPage() {
                 <th className="px-6 py-4 font-semibold text-slate-700">Age / Gender</th>
                 <th className="px-6 py-4 font-semibold text-slate-700">Date & Time</th>
                 <th className="px-6 py-4 font-semibold text-slate-700">Status</th>
+                <th className="px-6 py-4 font-semibold text-slate-700 text-right">Action</th>
               </tr>
             </thead>
             <tbody>
@@ -65,9 +67,25 @@ export default function DoctorAppointmentsPage() {
                     {apt.date.split('T')[0]} at {apt.time}
                   </td>
                   <td className="px-6 py-4">
-                    <span className="px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs font-bold">
+                    <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                      apt.status === 'Completed' ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700'
+                    }`}>
                       {apt.status}
                     </span>
+                  </td>
+                  <td className="px-6 py-4 text-right">
+                    {apt.status === 'Scheduled' ? (
+                      <Link 
+                        href={`/doctor/appointments/prescription?appointmentId=${apt.appointment_id}`}
+                        className="inline-block px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition shadow-sm"
+                      >
+                        Write Prescription
+                      </Link>
+                    ) : (
+                      <span className="inline-block px-4 py-2 text-slate-400 font-bold text-xs">
+                        Done
+                      </span>
+                    )}
                   </td>
                 </tr>
               ))}
