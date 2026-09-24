@@ -111,7 +111,16 @@ export default function RegisterPage() {
         body: JSON.stringify(formData),
       });
 
+
       const data = await response.json();
+
+      if (response.ok && data.pendingApproval) {
+        // Driver signup — do NOT redirect, just inform them
+        setSuccessMessage(
+          'Your driver account request has been submitted. Please wait for admin approval before logging in.'
+        );
+        return;
+      }
 
       if (response.ok) {
         setSuccessMessage('Account registered successfully! Redirecting to login...');
@@ -218,8 +227,8 @@ export default function RegisterPage() {
                 type="button"
                 onClick={() => setFormData({ ...formData, role: 'PATIENT' })}
                 className={`flex flex-col items-center justify-center p-3 rounded-xl border text-center transition ${formData.role === 'PATIENT'
-                    ? 'bg-blue-600 text-white border-blue-500 shadow-md font-bold'
-                    : 'border-transparent text-slate-500 hover:bg-slate-100 hover:text-slate-900'
+                  ? 'bg-blue-600 text-white border-blue-500 shadow-md font-bold'
+                  : 'border-transparent text-slate-500 hover:bg-slate-100 hover:text-slate-900'
                   }`}
               >
                 <span className="text-base mb-0.5">🏥</span>
@@ -231,8 +240,8 @@ export default function RegisterPage() {
                 type="button"
                 onClick={() => setFormData({ ...formData, role: 'BLOOD_DONOR' })}
                 className={`flex flex-col items-center justify-center p-3 rounded-xl border text-center transition ${formData.role === 'BLOOD_DONOR'
-                    ? 'bg-rose-500 text-white border-rose-400 shadow-md font-bold'
-                    : 'border-transparent text-slate-500 hover:bg-slate-100 hover:text-slate-900'
+                  ? 'bg-rose-500 text-white border-rose-400 shadow-md font-bold'
+                  : 'border-transparent text-slate-500 hover:bg-slate-100 hover:text-slate-900'
                   }`}
               >
                 <span className="text-base mb-0.5">🩸</span>
@@ -244,8 +253,8 @@ export default function RegisterPage() {
                 type="button"
                 onClick={() => setFormData({ ...formData, role: 'DRIVER' })}
                 className={`flex flex-col items-center justify-center p-3 rounded-xl border text-center transition ${formData.role === 'DRIVER'
-                    ? 'bg-amber-500 text-white border-amber-400 shadow-md font-bold'
-                    : 'border-transparent text-slate-500 hover:bg-slate-100 hover:text-slate-900'
+                  ? 'bg-amber-500 text-white border-amber-400 shadow-md font-bold'
+                  : 'border-transparent text-slate-500 hover:bg-slate-100 hover:text-slate-900'
                   }`}
               >
                 <span className="text-base mb-0.5">🚑</span>
@@ -348,10 +357,10 @@ export default function RegisterPage() {
                   required
                   placeholder="••••••••"
                   className={`w-full px-4 py-3 pl-10 rounded-xl bg-white border text-slate-900 placeholder-slate-400 outline-none transition text-sm ${formData.confirmPassword
-                      ? passwordsMatch
-                        ? 'border-emerald-400 focus:border-emerald-500'
-                        : 'border-rose-400 focus:border-rose-500'
-                      : 'border-slate-300 focus:border-blue-500'
+                    ? passwordsMatch
+                      ? 'border-emerald-400 focus:border-emerald-500'
+                      : 'border-rose-400 focus:border-rose-500'
+                    : 'border-slate-300 focus:border-blue-500'
                     }`}
                 />
                 <svg className="w-5 h-5 text-slate-400 absolute left-3 top-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">

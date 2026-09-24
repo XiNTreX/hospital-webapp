@@ -300,26 +300,50 @@ const SPECIALTIES = [
   'General Surgery', 'Dermatology', 'Psychiatry', 'Oncology', 'Internal Medicine',
 ];
 
-const ADMISSION_STEPS = [
+// const ADMISSION_STEPS = [
+//   {
+//     step: '01',
+//     title: 'Consultation',
+//     text: 'Meet a consultant in the outpatient department. Your history and initial findings are recorded digitally.',
+//   },
+//   {
+//     step: '02',
+//     title: 'Consultant Recommendation',
+//     text: 'If your condition requires inpatient care, your consultant recommends admission with a care plan.',
+//   },
+//   {
+//     step: '03',
+//     title: 'Registration & Bed Allotment',
+//     text: 'The admission desk registers you and allots a bed. Your stay is tracked in the hospital system.',
+//   },
+//   {
+//     step: '04',
+//     title: 'Treatment & Care',
+//     text: 'Receive treatment under your consultant, with prescriptions, tests and notes maintained in one record.',
+//   },
+// ];
+
+const ADMISSION_CONTACTS = [
   {
-    step: '01',
-    title: 'Consultation',
-    text: 'Meet a consultant in the outpatient department. Your history and initial findings are recorded digitally.',
+    icon: '📞',
+    title: 'Call the Admission Desk',
+    text: 'Speak directly with our 24/7 admission team for bed availability and intake questions.',
+    action: '+880 1900-000000',
+    href: 'tel:+8801900000000',
   },
   {
-    step: '02',
-    title: 'Consultant Recommendation',
-    text: 'If your condition requires inpatient care, your consultant recommends admission with a care plan.',
+    icon: '✉️',
+    title: 'Email Admissions',
+    text: 'Send referrals, insurance details or general admission queries. We reply within 24 hours.',
+    action: 'admission@xintrexhospital.com',
+    href: 'mailto:admission@xintrexhospital.com',
   },
   {
-    step: '03',
-    title: 'Registration & Bed Allotment',
-    text: 'The admission desk registers you and allots a bed. Your stay is tracked in the hospital system.',
-  },
-  {
-    step: '04',
-    title: 'Treatment & Care',
-    text: 'Receive treatment under your consultant, with prescriptions, tests and notes maintained in one record.',
+    icon: '📍',
+    title: 'Visit the Admission Office',
+    text: 'Ground floor, next to the main reception. Open daily for walk-in admission support.',
+    action: 'Divided and Unpopular Hospital & Diagnostic Center, Dhanmondi, Dhaka',
+    href: '#location', // change to your maps link if you have one
   },
 ];
 
@@ -1003,60 +1027,64 @@ export default function LandingPage() {
       </section>
 
       {/* ================= 07 · ADMISSION ================= */}
-      <section id="admission" className="scroll-mt-20 bg-slate-50 py-24 sm:py-28">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <Reveal>
-            <div className="mx-auto max-w-2xl text-center">
-              <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#12876F]">
-                Inpatient services
-              </p>
-              <h2 className="font-display mt-3 text-3xl font-extrabold tracking-tight text-[#0B2A4A] sm:text-4xl">
-                Admission made simple
-              </h2>
-              <p className="mt-4 text-base leading-relaxed text-slate-600">
-                If your treatment requires a hospital stay, the process is straightforward and
-                tracked at every step.
-              </p>
+     {/* ================= 07 · ADMISSION CONTACT ================= */}
+<section id="admission" className="scroll-mt-20 bg-slate-50 py-24 sm:py-28">
+  <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+    <Reveal>
+      <div className="mx-auto max-w-2xl text-center">
+        <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#12876F]">
+          Inpatient services
+        </p>
+        <h2 className="font-display mt-3 text-3xl font-extrabold tracking-tight text-[#0B2A4A] sm:text-4xl">
+          Contact us for admission related information
+        </h2>
+        <p className="mt-4 text-base leading-relaxed text-slate-600">
+          Planning a hospital stay or need to check bed availability? Our admission desk is
+          available around the clock to guide you through the process.
+        </p>
+      </div>
+    </Reveal>
+
+    <div className="mt-16 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+      {ADMISSION_CONTACTS.map((item, i) => (
+        <Reveal key={item.title} delay={i * 120}>
+          <a
+            href={item.href}
+            className="group flex h-full flex-col rounded-2xl border border-[#1B5FAF]/15 bg-white p-8 shadow-sm transition hover:-translate-y-1 hover:border-[#1B5FAF]/40 hover:shadow-lg"
+          >
+            <div className="flex h-12 w-12 items-center justify-center rounded-full border-2 border-[#1B5FAF] bg-white text-lg text-[#1B5FAF] shadow-sm">
+              {item.icon}
             </div>
-          </Reveal>
+            <h3 className="font-display mt-5 text-lg font-bold text-[#0B2A4A]">
+              {item.title}
+            </h3>
+            <p className="mt-2 text-sm leading-relaxed text-slate-600">{item.text}</p>
+            <span className="mt-4 inline-flex items-center gap-1.5 text-sm font-bold text-[#1B5FAF] group-hover:text-[#14497F]">
+              {item.action}
+              <IconArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+            </span>
+          </a>
+        </Reveal>
+      ))}
+    </div>
 
-          <div className="relative mt-16">
-            {/* Connector line (desktop) */}
-            <div className="absolute left-0 right-0 top-6 hidden border-t-2 border-dashed border-slate-300/80 lg:block" aria-hidden="true" />
-
-            <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-4">
-              {ADMISSION_STEPS.map((step, i) => (
-                <Reveal key={step.step} delay={i * 120}>
-                  <div className="relative">
-                    <div className="font-display relative z-10 flex h-12 w-12 items-center justify-center rounded-full border-2 border-[#1B5FAF] bg-white text-sm font-extrabold text-[#1B5FAF] shadow-sm">
-                      {step.step}
-                    </div>
-                    <h3 className="font-display mt-5 text-lg font-bold text-[#0B2A4A]">{step.title}</h3>
-                    <p className="mt-2 text-sm leading-relaxed text-slate-600">{step.text}</p>
-                  </div>
-                </Reveal>
-              ))}
-            </div>
-          </div>
-
-          <Reveal delay={200}>
-            <div className="mt-16 flex flex-col items-center gap-4 rounded-2xl border border-[#1B5FAF]/15 bg-white p-8 text-center sm:flex-row sm:justify-between sm:text-left">
-              <p className="max-w-xl text-sm font-semibold text-[#0B2A4A] sm:text-base">
-                Admission services are coordinated through the hospital system after you sign in —
-                your consultation and admission history stay connected.
-              </p>
-              <Link
-                href="/login"
-                className="group inline-flex shrink-0 items-center gap-2 rounded-xl bg-[#1B5FAF] px-6 py-3.5 text-sm font-bold text-white shadow-md shadow-[#1B5FAF]/25 transition hover:bg-[#14497F]"
-              >
-                Sign In for Admission Services
-                <IconArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
-              </Link>
-            </div>
-          </Reveal>
-        </div>
-      </section>
-
+    <Reveal delay={200}>
+      <div className="mt-16 flex flex-col items-center gap-4 rounded-2xl border border-[#1B5FAF]/15 bg-white p-8 text-center sm:flex-row sm:justify-between sm:text-left">
+        <p className="max-w-xl text-sm font-semibold text-[#0B2A4A] sm:text-base">
+          Once admitted, your consultation notes, prescriptions, tests and inpatient records
+          stay connected inside the hospital portal.
+        </p>
+        <Link
+          href="/login"
+          className="group inline-flex shrink-0 items-center gap-2 rounded-xl bg-[#1B5FAF] px-6 py-3.5 text-sm font-bold text-white shadow-md shadow-[#1B5FAF]/25 transition hover:bg-[#14497F]"
+        >
+          Sign In to the Patient Portal
+          <IconArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+        </Link>
+      </div>
+    </Reveal>
+  </div>
+</section>
       {/* ================= 08 · DIGITAL HEALTHCARE ================= */}
       <section id="digital" className="scroll-mt-20 bg-white py-24 sm:py-28">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">

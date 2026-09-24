@@ -25,7 +25,7 @@ export default function LoginPage() {
     setIsLoading(true);
     setErrorMessage('');
     setSuccessMessage('');
-    
+
     try {
       const response = await fetch('http://localhost:5001/api/auth/login', {
         method: 'POST',
@@ -40,8 +40,8 @@ export default function LoginPage() {
       if (response.ok) {
         setSuccessMessage('Sign in successful! Entering medical portal...');
         localStorage.setItem('token', data.token);
-        
-        const userRole = data.user?.role || data.role || data.user?.user_type || data.user_type; 
+
+        const userRole = data.user?.role || data.role || data.user?.user_type || data.user_type;
         if (userRole) {
           localStorage.setItem('role', userRole);
         }
@@ -56,10 +56,18 @@ export default function LoginPage() {
           } else if (userRole === 'DRIVER') {
             router.push('/driver/dashboard');
           } else {
-            router.push('/patient/dashboard'); 
+            router.push('/patient/dashboard');
           }
         }, 1500);
 
+      } else if (data.pendingApproval) {
+        // Driver signup still waiting for admin approval
+        setErrorMessage(
+          'Your driver account request is still waiting for admin approval. You will be able to sign in once it is approved.'
+        );
+      } else if (data.rejected) {
+        // Driver signup was rejected
+        setErrorMessage(data.error || 'Your driver account request was rejected.');
       } else {
         setErrorMessage(data.error || 'Invalid email or password.');
       }

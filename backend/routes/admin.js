@@ -137,5 +137,125 @@ router.post('/medicines', verifyToken, async (req, res) => {
     res.status(500).json({ error: 'Server error creating medicine' });
   }
 });
+// ==========================================
+// GET /api/admin/driver-requests
+// ==========================================
+router.get('/driver-requests', verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT request_id, first_name, last_name, email, license_no, phone,
+              status, rejection_reason, requested_at, reviewed_at
+       FROM "DRIVER_SIGNUP_REQUEST"
+       WHERE status = 'Pending'
+       ORDER BY requested_at ASC`
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Fetch driver requests error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
 
+// ==========================================
+// POST /api/admin/driver-requests/:id/approve
+// ==========================================
+router.post('/driver-requests/:id/approve', verifyToken, verifyAdmin, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const requestId = parseInt(req.params.id);
+
+    await client.query('BEGIN');
+
+    const reqRow = await client.query(
+      `SELECT * FROM "DRIVER_SIGNUP_REQUEST" WHERE request_id = $1 FOR UPDATE`,
+      [requestId]
+    );
+    if (reqRow.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Request not found' });
+    }
+    const r = reqRow.rows[0];
+    if (r.status !== 'Pending') {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: `Request already ${r.status.toLowerCase()}.` });
+    }
+
+    // Look up admin_id of the reviewer
+    const adminRow = await client.query(
+      `SELECT admin_id FROM "ADMIN" WHERE account_id = $1`,
+      [req.user.accountId]
+    );
+    const adminId = adminRow.rows[0]?.admin_id || null;
+
+    // 1. Create USER_ACCOUNT (reusing the stored password hash)
+    const acc = await client.query(
+      `INSERT INTO "USER_ACCOUNT" (email, password_hash, user_type)
+       VALUES ($1, $2, 'DRIVER') RETURNING account_id`,
+      [r.email, r.password_hash]
+    );
+
+    // 2. Create DRIVER profile
+    await client.query(
+      `INSERT INTO "DRIVER" (first_name, last_name, license_no, phone, status, account_id)
+       VALUES ($1, $2, $3, $4, 'Available', $5)`,
+      [r.first_name, r.last_name, r.license_no, r.phone, acc.rows[0].account_id]
+    );
+
+    // 3. Mark request approved
+    await client.query(
+      `UPDATE "DRIVER_SIGNUP_REQUEST"
+       SET status = 'Approved', reviewed_at = CURRENT_TIMESTAMP, reviewed_by = $1
+       WHERE request_id = $2`,
+      [adminId, requestId]
+    );
+
+    await client.query('COMMIT');
+    res.json({ message: 'Driver approved and account created.' });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Approve driver error:', err);
+    if (err.code === '23505') {
+      return res.status(400).json({ error: 'A user with this email or license already exists.' });
+    }
+    res.status(500).json({ error: 'Server error' });
+  } finally {
+    client.release();
+  }
+});
+
+// ==========================================
+// POST /api/admin/driver-requests/:id/reject
+// Body: { reason?: string }
+// ==========================================
+router.post('/driver-requests/:id/reject', verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const requestId = parseInt(req.params.id);
+    const { reason } = req.body;
+
+    const adminRow = await pool.query(
+      `SELECT admin_id FROM "ADMIN" WHERE account_id = $1`,
+      [req.user.accountId]
+    );
+    const adminId = adminRow.rows[0]?.admin_id || null;
+
+    const result = await pool.query(
+      `UPDATE "DRIVER_SIGNUP_REQUEST"
+       SET status = 'Rejected',
+           rejection_reason = $1,
+           reviewed_at = CURRENT_TIMESTAMP,
+           reviewed_by = $2
+       WHERE request_id = $3 AND status = 'Pending'
+       RETURNING request_id`,
+      [reason || null, adminId, requestId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Pending request not found.' });
+    }
+    res.json({ message: 'Request rejected.' });
+  } catch (err) {
+    console.error('Reject driver error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
 module.exports = router;

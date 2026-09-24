@@ -32,6 +32,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { name: 'Manage Doctors', path: '/admin/doctors', icon: '👨‍⚕️' },
     { name: 'Tests Catalog', path: '/admin/tests', icon: '🔬' },
     { name: 'Medicines Inventory', path: '/admin/medicines', icon: '💊' },
+    { name: 'Driver Requests', path: '/admin/driver-requests', icon: '🚑' },
   ];
 
   if (!isAuthorized) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
