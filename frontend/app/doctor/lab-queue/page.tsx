@@ -128,7 +128,7 @@ export default function LabQueuePage() {
             <tbody className="divide-y divide-slate-100">
               {queue.map((item) => (
                 <tr key={item.report_id} className="hover:bg-slate-50/80 transition">
-                  <td className="px-6 py-4 text-slate-600 font-medium">{item.date.replace('T', ' ').substring(0, 16)}</td>
+                  <td className="px-6 py-4 text-slate-600 font-medium">{new Date(item.date).toLocaleDateString('en-CA')}</td>
                   <td className="px-6 py-4 font-bold text-slate-900">
                     Patient #{item.patient_id} <span className="font-normal text-slate-600 ml-1">({item.first_name} {item.last_name})</span>
                   </td>

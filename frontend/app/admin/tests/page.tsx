@@ -120,7 +120,8 @@ export default function AdminTestsPage() {
                   required
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="w-full p-3 border border-slate-300 rounded-xl text-sm focus:outline-none focus:border-indigo-500"
+                  style={{ color: '#000000' }}
+                  className="w-full p-3 border border-slate-300 rounded-xl text-sm placeholder:text-slate-400 focus:outline-none focus:border-indigo-500"
                   placeholder="e.g. Dengue IgG/IgM Antibody"
                 />
               </div>
@@ -133,7 +134,8 @@ export default function AdminTestsPage() {
                   required
                   value={cost}
                   onChange={(e) => setCost(e.target.value)}
-                  className="w-full p-3 border border-slate-300 rounded-xl text-sm focus:outline-none focus:border-indigo-500"
+                  style={{ color: '#000000' }}
+                  className="w-full p-3 border border-slate-300 rounded-xl text-sm placeholder:text-slate-400 focus:outline-none focus:border-indigo-500"
                   placeholder="e.g. 500"
                 />
               </div>

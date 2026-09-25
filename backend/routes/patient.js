@@ -411,7 +411,7 @@ router.get('/reports/pending', verifyToken, async (req, res) => {
 router.get('/reports/past', verifyToken, async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT tr.report_id, tr.date, tr.result,
+      `SELECT tr.report_id, tr.date, tr.remarks,
               t.name AS test_name,
               d.first_name AS doc_first, d.last_name AS doc_last, d.specialization
        FROM "TEST_REPORT" tr
@@ -435,10 +435,21 @@ router.get('/reports/past', verifyToken, async (req, res) => {
 router.post('/reports/submit-specimen', verifyToken, async (req, res) => {
   try {
     const { report_id } = req.body;
-    await pool.query(
-      `UPDATE "TEST_REPORT" SET status = 'Specimen Received' WHERE report_id = $1`,
-      [report_id]
+    const { accountId } = req.user;
+
+    const result = await pool.query(
+      `UPDATE "TEST_REPORT" 
+       SET status = 'Specimen Received' 
+       WHERE report_id = $1 
+       AND patient_id = (SELECT patient_id FROM "PATIENT" WHERE account_id = $2)
+       RETURNING report_id`,
+      [report_id, accountId] // SECURITY FIX: Enforce ownership
     );
+
+    if (result.rowCount === 0) {
+      return res.status(403).json({ error: 'Unauthorized or report not found.' });
+    }
+
     res.json({ message: 'Specimen submitted successfully' });
   } catch (err) {
     console.error('Error submitting specimen:', err);
@@ -452,13 +463,23 @@ router.post('/reports/submit-specimen', verifyToken, async (req, res) => {
 router.get('/reports/:reportId/details', verifyToken, async (req, res) => {
   try {
     const { reportId } = req.params;
+    const { accountId } = req.user; // Get logged-in user's account ID
+
     const result = await pool.query(
       `SELECT tp.parameter_name, tp.normal_range, trd.result_value
        FROM "TEST_REPORT_DETAIL" trd
        JOIN "TEST_PARAMETER" tp ON trd.parameter_id = tp.parameter_id
-       WHERE trd.report_id = $1`,
-      [reportId]
+       JOIN "TEST_REPORT" tr ON trd.report_id = tr.report_id
+       JOIN "PATIENT" p ON tr.patient_id = p.patient_id
+       WHERE trd.report_id = $1 AND p.account_id = $2`, 
+      [reportId, accountId] // SECURITY FIX: Enforce ownership
     );
+
+    if (result.rows.length === 0) {
+      // If no rows return, it means the report doesn't exist OR doesn't belong to them
+      return res.status(404).json({ error: 'Report details not found or unauthorized' });
+    }
+
     res.json(result.rows);
   } catch (err) {
     console.error('Error fetching report details:', err);
@@ -642,8 +663,8 @@ router.post('/blood-requests', verifyToken, async (req, res) => {
 
     const result = await pool.query(
       `INSERT INTO "BLOOD_REQUEST"
-       (blood_group_needed, units_needed, need_date, status, patient_id, patient_notes)
-       VALUES ($1, $2, $3, 'Pending', $4, $5)
+       (blood_group_needed, units_needed, need_date, status, patient_id, patient_notes, request_date)
+       VALUES ($1, $2, $3, 'Pending', $4, $5, (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Dhaka')::date)
        RETURNING request_id, request_date`,
       [bloodGroup, units, needDate, patientId, patientNotes || '']
     );
@@ -708,8 +729,8 @@ router.post('/ambulance-requests', verifyToken, async (req, res) => {
 
     const result = await pool.query(
       `INSERT INTO "AMBULANCE_REQUEST"
-       (pickup_location, drop_location, status, patient_id, patient_notes)
-       VALUES ($1, $2, 'Pending', $3, $4)
+       (pickup_location, drop_location, status, patient_id, patient_notes, request_time)
+       VALUES ($1, $2, 'Pending', $3, $4, (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Dhaka'))
        RETURNING request_id, request_time`,
       [pickupLocation, dropLocation, patientId, patientNotes || '']
     );

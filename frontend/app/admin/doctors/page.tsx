@@ -109,7 +109,7 @@ export default function AdminDoctorsPage() {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {doctors.map((doc) => (
-                <tr key={doc.doctor_id} className="hover:bg-slate-50/80 transition">
+                <tr key={doc.doctor_id} className="hover:bg-slate-50/85 transition">
                   <td className="px-6 py-4 font-bold text-slate-900">Dr. {doc.first_name} {doc.last_name}</td>
                   <td className="px-6 py-4">
                     <span className={`px-3 py-1 rounded-full text-xs font-bold ${doc.doctor_type === 'Laboratory' ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-indigo-50 text-indigo-700 border border-indigo-200'}`}>
@@ -144,7 +144,8 @@ export default function AdminDoctorsPage() {
                     required
                     value={formData.first_name}
                     onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
-                    className="w-full p-3 border border-slate-300 rounded-xl text-sm focus:outline-none focus:border-indigo-500"
+                    style={{ color: '#000000' }}
+                    className="w-full p-3 border border-slate-300 rounded-xl text-sm placeholder:text-slate-400 focus:outline-none focus:border-indigo-500"
                     placeholder="e.g. Sarah"
                   />
                 </div>
@@ -155,7 +156,8 @@ export default function AdminDoctorsPage() {
                     required
                     value={formData.last_name}
                     onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
-                    className="w-full p-3 border border-slate-300 rounded-xl text-sm focus:outline-none focus:border-indigo-500"
+                    style={{ color: '#000000' }}
+                    className="w-full p-3 border border-slate-300 rounded-xl text-sm placeholder:text-slate-400 focus:outline-none focus:border-indigo-500"
                     placeholder="e.g. Jenkins"
                   />
                 </div>
@@ -169,7 +171,8 @@ export default function AdminDoctorsPage() {
                     required
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    className="w-full p-3 border border-slate-300 rounded-xl text-sm focus:outline-none focus:border-indigo-500"
+                    style={{ color: '#000000' }}
+                    className="w-full p-3 border border-slate-300 rounded-xl text-sm placeholder:text-slate-400 focus:outline-none focus:border-indigo-500"
                     placeholder="doctor@hospital.com"
                   />
                 </div>
@@ -180,7 +183,8 @@ export default function AdminDoctorsPage() {
                     required
                     value={formData.password}
                     onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    className="w-full p-3 border border-slate-300 rounded-xl text-sm focus:outline-none focus:border-indigo-500"
+                    style={{ color: '#000000' }}
+                    className="w-full p-3 border border-slate-300 rounded-xl text-sm placeholder:text-slate-400 focus:outline-none focus:border-indigo-500"
                   />
                 </div>
               </div>
@@ -191,7 +195,8 @@ export default function AdminDoctorsPage() {
                   <select
                     value={formData.doctor_type}
                     onChange={(e) => setFormData({ ...formData, doctor_type: e.target.value })}
-                    className="w-full p-3 border border-slate-300 rounded-xl text-sm bg-white focus:outline-none focus:border-indigo-500"
+                    style={{ color: '#000000' }}
+                    className="w-full p-3 border border-slate-300 rounded-xl text-sm bg-white placeholder:text-slate-400 focus:outline-none focus:border-indigo-500"
                   >
                     <option value="Clinical">Clinical Doctor</option>
                     <option value="Laboratory">Laboratory Pathologist</option>
@@ -203,7 +208,8 @@ export default function AdminDoctorsPage() {
                     type="text"
                     value={formData.room_number}
                     onChange={(e) => setFormData({ ...formData, room_number: e.target.value })}
-                    className="w-full p-3 border border-slate-300 rounded-xl text-sm focus:outline-none focus:border-indigo-500"
+                    style={{ color: '#000000' }}
+                    className="w-full p-3 border border-slate-300 rounded-xl text-sm placeholder:text-slate-400 focus:outline-none focus:border-indigo-500"
                     placeholder="e.g. Room 302"
                   />
                 </div>
@@ -215,7 +221,8 @@ export default function AdminDoctorsPage() {
                   type="text"
                   value={formData.specialization}
                   onChange={(e) => setFormData({ ...formData, specialization: e.target.value })}
-                  className="w-full p-3 border border-slate-300 rounded-xl text-sm focus:outline-none focus:border-indigo-500"
+                  style={{ color: '#000000' }}
+                  className="w-full p-3 border border-slate-300 rounded-xl text-sm placeholder:text-slate-400 focus:outline-none focus:border-indigo-500"
                   placeholder="e.g. Cardiology, Pathology"
                 />
               </div>

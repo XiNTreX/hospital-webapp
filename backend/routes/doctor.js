@@ -2,6 +2,10 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../config/db');
 const { verifyToken } = require('../middleware/auth');
+
+// ==========================================
+// GET /api/doctor/profile
+// ==========================================
 router.get('/profile', verifyToken, async (req, res) => {
   try {
     const result = await pool.query(
@@ -54,6 +58,7 @@ router.get('/appointments', verifyToken, async (req, res) => {
     res.status(500).json({ error: 'Server error' });
   }
 });
+
 // ==========================================
 // GET /api/doctor/medicines
 // ==========================================
@@ -81,6 +86,9 @@ router.get('/tests', verifyToken, async (req, res) => {
 // ==========================================
 // GET /api/doctor/appointments/:id
 // ==========================================
+// ==========================================
+// GET /api/doctor/appointments/:id
+// ==========================================
 router.get('/appointments/:id', verifyToken, async (req, res) => {
   try {
     const result = await pool.query(`
@@ -88,11 +96,12 @@ router.get('/appointments/:id', verifyToken, async (req, res) => {
              p.first_name, p.last_name, p.dob, p.gender, p.blood_group
       FROM "APPOINTMENT" a
       JOIN "PATIENT" p ON a.patient_id = p.patient_id
-      WHERE a.appointment_id = $1
-    `, [req.params.id]);
+      JOIN "DOCTOR" d ON a.doctor_id = d.doctor_id
+      WHERE a.appointment_id = $1 AND d.account_id = $2
+    `, [req.params.id, req.user.accountId]); // <-- SECURITY FIX
     
     if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Appointment not found' });
+      return res.status(404).json({ error: 'Appointment not found or unauthorized' });
     }
     res.json(result.rows[0]);
   } catch (err) {
@@ -109,17 +118,23 @@ router.post('/prescriptions', verifyToken, async (req, res) => {
     await client.query('BEGIN');
     const { appointment_id, patient_id, diagnosis, advice, medicines, tests } = req.body;
 
-    // Get doctor_id for the logged-in account
     const docRes = await client.query(
       'SELECT doctor_id FROM "DOCTOR" WHERE account_id = $1', 
       [req.user.accountId]
     );
     const doctor_id = docRes.rows[0].doctor_id;
-
-    // 1. Insert Prescription (Linked to appointment)
+    const aptCheck = await client.query(
+      `SELECT appointment_id FROM "APPOINTMENT" WHERE appointment_id = $1 AND doctor_id = $2`,
+      [appointment_id, doctor_id]
+    );
+    if (aptCheck.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ error: 'Unauthorized: This appointment belongs to another doctor.' });
+    }
+    // 1. Insert Prescription
     const presRes = await client.query(
       `INSERT INTO "PRESCRIPTION" (date, diagnosis, advice, doctor_id, patient_id, appointment_id)
-       VALUES (CURRENT_DATE, $1, $2, $3, $4, $5) RETURNING prescription_id`,
+       VALUES ((CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Dhaka')::date, $1, $2, $3, $4, $5) RETURNING prescription_id`,
       [diagnosis || '', advice || '', doctor_id, patient_id, appointment_id]
     );
     const prescription_id = presRes.rows[0].prescription_id;
@@ -140,13 +155,13 @@ router.post('/prescriptions', verifyToken, async (req, res) => {
       for (let testId of tests) {
         await client.query(
           `INSERT INTO "TEST_REPORT" (date, status, doctor_id, patient_id, test_id)
-           VALUES (CURRENT_DATE, 'Pending', $1, $2, $3)`,
+           VALUES ((CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Dhaka')::date, 'Pending', $1, $2, $3)`,
           [doctor_id, patient_id, testId]
         );
       }
     }
 
-    // 4. Update Appointment Status to 'Completed'
+    // 4. Update Appointment Status
     await client.query(
       `UPDATE "APPOINTMENT" SET status = 'Completed' WHERE appointment_id = $1`,
       [appointment_id]
@@ -162,6 +177,7 @@ router.post('/prescriptions', verifyToken, async (req, res) => {
     client.release();
   }
 });
+
 // ==========================================
 // GET /api/doctor/prescriptions/:appointmentId
 // ==========================================
@@ -206,67 +222,104 @@ router.get('/prescriptions/:appointmentId', verifyToken, async (req, res) => {
 });
 
 // ==========================================
-// GET /api/doctor/records (Fetch all past patients)
+// GET /api/doctor/records (Fetch unique past patients)
 // ==========================================
 router.get('/records', verifyToken, async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT a.appointment_id, a.date, p.first_name, p.last_name, p.gender, 
-              EXTRACT(YEAR FROM AGE(CURRENT_DATE, p.dob)) AS age
+      `SELECT p.patient_id, p.first_name, p.last_name, p.gender, 
+              EXTRACT(YEAR FROM AGE(CURRENT_DATE, p.dob)) AS age,
+              MAX(a.date) as last_visit
        FROM "APPOINTMENT" a
        JOIN "PATIENT" p ON a.patient_id = p.patient_id
        JOIN "DOCTOR" d ON a.doctor_id = d.doctor_id
        WHERE d.account_id = $1 AND a.status = 'Completed'
-       ORDER BY a.date DESC`,
+       GROUP BY p.patient_id, p.first_name, p.last_name, p.gender, p.dob
+       ORDER BY last_visit DESC`,
       [req.user.accountId]
     );
     res.json(result.rows);
   } catch (err) {
+    console.error('Error fetching patient records:', err);
     res.status(500).json({ error: 'Server error' });
-  }
-});
-// ==========================================
-// GET /api/doctor/pending-tests
-// ==========================================
-router.get('/pending-tests', verifyToken, async (req, res) => {
-  try {
-    const result = await pool.query(
-      `SELECT tr.report_id, tr.date, tr.status, 
-              t.name AS test_name, 
-              p.first_name, p.last_name, p.gender, EXTRACT(YEAR FROM AGE(CURRENT_DATE, p.dob)) AS age
-       FROM "TEST_REPORT" tr
-       JOIN "TEST" t ON tr.test_id = t.test_id
-       JOIN "PATIENT" p ON tr.patient_id = p.patient_id
-       JOIN "DOCTOR" d ON tr.doctor_id = d.doctor_id
-       WHERE d.account_id = $1 AND tr.status = 'Pending'
-       ORDER BY tr.date DESC`,
-      [req.user.accountId]
-    );
-    res.json(result.rows);
-  } catch (err) {
-    console.error('Error fetching pending tests:', err);
-    res.status(500).json({ error: 'Server error fetching tests' });
   }
 });
 
 // ==========================================
-// POST /api/doctor/tests/result
+// GET /api/doctor/patients/:patientId/prescriptions
 // ==========================================
-router.post('/tests/result', verifyToken, async (req, res) => {
+router.get('/patients/:patientId/prescriptions', verifyToken, async (req, res) => {
   try {
-    const { report_id, result_text } = req.body;
-    await pool.query(
-      `UPDATE "TEST_REPORT" 
-       SET result = $1, status = 'Completed' 
-       WHERE report_id = $2`,
-      [result_text, report_id]
+    const { patientId } = req.params;
+    const { accountId } = req.user;
+
+    const presRes = await pool.query(
+      `SELECT pr.prescription_id, pr.date, pr.diagnosis, pr.advice
+       FROM "PRESCRIPTION" pr
+       JOIN "DOCTOR" d ON pr.doctor_id = d.doctor_id
+       WHERE pr.patient_id = $1 AND d.account_id = $2
+       ORDER BY pr.date DESC`,
+      [patientId, accountId]
     );
-    res.json({ message: 'Test result saved successfully' });
+
+    const prescriptions = [];
+    for (let p of presRes.rows) {
+      const medRes = await pool.query(
+        `SELECT pm.frequency, pm.duration, pm.before_after_meal, m.name, m.dosage
+         FROM "PRESCRIPTION_MEDICINE" pm
+         JOIN "MEDICINE" m ON pm.medicine_id = m.medicine_id
+         WHERE pm.prescription_id = $1`,
+        [p.prescription_id]
+      );
+      p.medicines = medRes.rows;
+      prescriptions.push(p);
+    }
+    res.json(prescriptions);
   } catch (err) {
-    console.error('Error saving test result:', err);
-    res.status(500).json({ error: 'Server error saving result' });
+    console.error('Error fetching prescriptions:', err);
+    res.status(500).json({ error: 'Server error' });
   }
 });
+
+// ==========================================
+// GET /api/doctor/patients/:patientId/tests
+// ==========================================
+router.get('/patients/:patientId/tests', verifyToken, async (req, res) => {
+  try {
+    const { patientId } = req.params;
+    
+    const testsRes = await pool.query(
+      `SELECT tr.report_id, tr.status, tr.date, tr.remarks, t.name AS test_name
+       FROM "TEST_REPORT" tr
+       JOIN "TEST" t ON tr.test_id = t.test_id
+       WHERE tr.patient_id = $1
+       ORDER BY tr.date DESC`,
+      [patientId]
+    );
+
+    const reportsWithDetails = [];
+    for (let report of testsRes.rows) {
+      if (report.status === 'Completed') {
+        const detailsRes = await pool.query(
+          `SELECT tp.parameter_name, tp.normal_range, trd.result_value
+           FROM "TEST_REPORT_DETAIL" trd
+           JOIN "TEST_PARAMETER" tp ON trd.parameter_id = tp.parameter_id
+           WHERE trd.report_id = $1`,
+          [report.report_id]
+        );
+        report.parameters = detailsRes.rows;
+      } else {
+        report.parameters = [];
+      }
+      reportsWithDetails.push(report);
+    }
+    res.json(reportsWithDetails);
+  } catch (err) {
+    console.error('Error fetching tests:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // ==========================================
 // GET /api/doctor/lab-queue (Fetch specimens ready for processing)
 // ==========================================
@@ -291,9 +344,6 @@ router.get('/lab-queue', verifyToken, async (req, res) => {
 });
 
 // ==========================================
-// GET /api/doctor/lab-tests/:testId/parameters (Fetch parameters for a test)
-// ==========================================
-// ==========================================
 // GET /api/doctor/lab-tests/:testId/parameters
 // ==========================================
 router.get('/lab-tests/:testId/parameters', verifyToken, async (req, res) => {
@@ -313,15 +363,14 @@ router.get('/lab-tests/:testId/parameters', verifyToken, async (req, res) => {
 });
 
 // ==========================================
-// POST /api/doctor/lab-tests/submit (Submit structured report results)
+// POST /api/doctor/lab-tests/submit
 // ==========================================
 router.post('/lab-tests/submit', verifyToken, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const { report_id, remarks, results } = req.body; // results is an array of { parameter_id, result_value }
+    const { report_id, remarks, results } = req.body;
 
-    // 1. Get doctor_id from account_id
     const docRes = await client.query(
       `SELECT doctor_id FROM "DOCTOR" WHERE account_id = $1`,
       [req.user.accountId]
@@ -332,7 +381,6 @@ router.post('/lab-tests/submit', verifyToken, async (req, res) => {
     }
     const labDoctorId = docRes.rows[0].doctor_id;
 
-    // 2. Insert each parameter result into TEST_REPORT_DETAIL
     for (const item of results) {
       await client.query(
         `INSERT INTO "TEST_REPORT_DETAIL" (report_id, parameter_id, result_value) 
@@ -341,7 +389,6 @@ router.post('/lab-tests/submit', verifyToken, async (req, res) => {
       );
     }
 
-    // 3. Update TEST_REPORT status, remarks, and lab_doctor_id
     await client.query(
       `UPDATE "TEST_REPORT" 
        SET status = 'Completed', remarks = $1, lab_doctor_id = $2 
@@ -357,56 +404,5 @@ router.post('/lab-tests/submit', verifyToken, async (req, res) => {
     res.status(500).json({ error: 'Server error submitting report' });
   }
 });
-// ==========================================
-// GET /api/doctor/records/:appointmentId/tests
-// ==========================================
-// ==========================================
-// GET /api/doctor/records/:appointmentId/tests
-// ==========================================
-router.get('/records/:appointmentId/tests', verifyToken, async (req, res) => {
-  try {
-    const { appointmentId } = req.params;
-    
-    // 1. Get the patient_id from the appointment
-    const aptRes = await pool.query(
-      `SELECT patient_id FROM "APPOINTMENT" WHERE appointment_id = $1`,
-      [appointmentId]
-    );
-    if (aptRes.rows.length === 0) return res.status(404).json({ error: 'Appointment not found' });
-    const { patient_id } = aptRes.rows[0];
 
-    // 2. Fetch all test reports for this patient ordered by date
-    const testsRes = await pool.query(
-      `SELECT tr.report_id, tr.status, tr.date, tr.remarks, t.name AS test_name
-       FROM "TEST_REPORT" tr
-       JOIN "TEST" t ON tr.test_id = t.test_id
-       WHERE tr.patient_id = $1
-       ORDER BY tr.date DESC`,
-      [patient_id]
-    );
-
-    // 3. For each test report that is completed, fetch its detailed parameters
-    const reportsWithDetails = [];
-    for (let report of testsRes.rows) {
-      if (report.status === 'Completed') {
-        const detailsRes = await pool.query(
-          `SELECT tp.parameter_name, tp.normal_range, trd.result_value
-           FROM "TEST_REPORT_DETAIL" trd
-           JOIN "TEST_PARAMETER" tp ON trd.parameter_id = tp.parameter_id
-           WHERE trd.report_id = $1`,
-          [report.report_id]
-        );
-        report.parameters = detailsRes.rows;
-      } else {
-        report.parameters = [];
-      }
-      reportsWithDetails.push(report);
-    }
-
-    res.json(reportsWithDetails);
-  } catch (err) {
-    console.error('Error fetching record tests:', err);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
 module.exports = router;

@@ -57,49 +57,6 @@ export default function ReferredRequestsPage() {
     fetchData();
   }, []);
 
-  const handleAccept = async (id: number) => {
-    if (!confirm('Accept this referral? You are committing to donate one bag.')) return;
-    setActionId(id);
-    try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`http://localhost:5001/api/donor/referrals/${id}/accept`, {
-        method: 'PUT',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json();
-      if (res.ok) fetchData();
-      else alert(data.error || 'Failed to accept');
-    } catch {
-      alert('Server error');
-    } finally {
-      setActionId(null);
-    }
-  };
-
-  const handleDecline = async (id: number) => {
-    if (
-      !confirm(
-        'Decline this referral? The referring donor will need to find someone else.'
-      )
-    )
-      return;
-    setActionId(id);
-    try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`http://localhost:5001/api/donor/referrals/${id}/decline`, {
-        method: 'PUT',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json();
-      if (res.ok) fetchData();
-      else alert(data.error || 'Failed to decline');
-    } catch {
-      alert('Server error');
-    } finally {
-      setActionId(null);
-    }
-  };
-
   const handleFulfill = async (id: number) => {
     if (
       !confirm(
@@ -152,13 +109,14 @@ export default function ReferredRequestsPage() {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh]">
         <div className="w-12 h-12 border-4 border-violet-600 border-t-transparent rounded-full animate-spin" />
-        <p className="mt-4 text-slate-500 text-sm">Loading referrals...</p>
+        <p className="mt-4 text-slate-500 text-sm">Loading invitations...</p>
       </div>
     );
   }
 
-  const pending = rows.filter((r) => r.status === 'Pending');
-  const accepted = rows.filter((r) => r.status === 'Pledged');
+  // We keep 'Pending' in the filter strictly for backwards compatibility 
+  // with any legacy test data you generated before the migration.
+  const active = rows.filter((r) => r.status === 'Pending' || r.status === 'Pledged');
   const past = rows.filter(
     (r) => r.status === 'Fulfilled' || r.status === 'Cancelled' || r.status === 'Declined'
   );
@@ -219,7 +177,7 @@ export default function ReferredRequestsPage() {
             </div>
 
             <p className="text-xs text-slate-500">
-              Referred by{' '}
+              Invited by{' '}
               <b className="text-slate-800">
                 {r.referrer_first_name} {r.referrer_last_name}
               </b>{' '}
@@ -248,7 +206,7 @@ export default function ReferredRequestsPage() {
             )}
 
             <p className="text-[11px] text-slate-400 mt-2">
-              Referred {formatDateTimeDhaka(r.pledged_at)}
+              Registered via invite on {formatDateTimeDhaka(r.pledged_at)}
               {r.status === 'Fulfilled' &&
                 r.fulfilled_at &&
                 ` · Fulfilled ${formatDateTimeDhaka(r.fulfilled_at)}`}
@@ -261,25 +219,6 @@ export default function ReferredRequestsPage() {
             </p>
           </div>
         </div>
-
-        {r.status === 'Pending' && (
-          <div className="flex gap-2">
-            <button
-              onClick={() => handleDecline(r.donation_id)}
-              disabled={actionId === r.donation_id}
-              className="px-3 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold text-xs border border-rose-200 transition disabled:opacity-50"
-            >
-              Decline
-            </button>
-            <button
-              onClick={() => handleAccept(r.donation_id)}
-              disabled={actionId === r.donation_id}
-              className="px-3 py-2 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-bold text-xs transition shadow-md disabled:opacity-50"
-            >
-              {actionId === r.donation_id ? '...' : 'Accept Referral'}
-            </button>
-          </div>
-        )}
 
         {r.status === 'Pledged' && (
           <div className="flex gap-2">
@@ -306,8 +245,8 @@ export default function ReferredRequestsPage() {
   return (
     <div className="max-w-5xl mx-auto space-y-6">
       <div>
-        <h1 className="text-3xl font-bold text-gray-900">Referred Requests</h1>
-        <p className="text-slate-500 mt-1">Donations other donors have referred you to</p>
+        <h1 className="text-3xl font-bold text-gray-900">Invited Donations</h1>
+        <p className="text-slate-500 mt-1">Donation pledges created from an external invite link</p>
         <p className="text-xs text-slate-400 mt-1">Total: {rows.length}</p>
       </div>
 
@@ -317,26 +256,13 @@ export default function ReferredRequestsPage() {
         </div>
       )}
 
-      {pending.length > 0 && (
-        <div>
-          <h2 className="text-xs font-bold uppercase tracking-wider text-violet-600 mb-3">
-            🔔 Awaiting Your Response ({pending.length})
-          </h2>
-          <div className="space-y-3">
-            {pending.map((r) => (
-              <Card key={r.donation_id} r={r} />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {accepted.length > 0 && (
+      {active.length > 0 && (
         <div>
           <h2 className="text-xs font-bold uppercase tracking-wider text-amber-600 mb-3">
-            ✋ You Accepted — Donate Soon ({accepted.length})
+            ✋ Active Invites — Donate Soon ({active.length})
           </h2>
           <div className="space-y-3">
-            {accepted.map((r) => (
+            {active.map((r) => (
               <Card key={r.donation_id} r={r} />
             ))}
           </div>
@@ -352,7 +278,7 @@ export default function ReferredRequestsPage() {
             <span className="text-5xl block mb-4">📭</span>
             <h3 className="text-lg font-bold text-slate-900">No history yet</h3>
             <p className="text-slate-500 text-sm mt-1">
-              Once you fulfil or decline a referral, it will appear here.
+              Once you fulfill or cancel an invited donation, it will appear here.
             </p>
           </div>
         ) : (

@@ -105,7 +105,7 @@ export default function DriverLayout({ children }: { children: React.ReactNode }
           </div>
           <div>
             <h1 className="text-base font-extrabold tracking-tight text-slate-900 leading-tight">
-              Xintrex Hospital · Driver Portal
+              Divided and Unpopular Hospital · Driver Portal
             </h1>
             <p className="text-[11px] font-medium text-slate-500 flex items-center gap-1.5">
               <span>Ambulance Dispatch Network</span>

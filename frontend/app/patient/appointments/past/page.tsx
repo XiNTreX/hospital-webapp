@@ -76,7 +76,7 @@ export default function PastAppointmentsPage() {
             </div>
 
             <div className="text-sm text-slate-600 space-y-1">
-              <p>🗓️ Date: <span className="font-bold text-slate-900">{apt.date.split('T')[0]}</span></p>
+              <p>🗓️ Date: <span className="font-bold text-slate-900">{new Date(apt.date).toLocaleDateString('en-CA')}</span></p>
               <p>⏰ Time: <span className="font-bold text-slate-900">{apt.time}</span></p>
               <p>✅ Status: <span className="text-emerald-600 font-bold">{apt.status}</span></p>
             </div>

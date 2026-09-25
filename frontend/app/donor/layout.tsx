@@ -50,8 +50,16 @@ export default function DonorLayout({ children }: { children: React.ReactNode })
         /* silent */
       }
     };
+    
+    // Fetch immediately on mount or when the route changes
     fetchHeaderData();
-  }, [router]);
+
+    // FIX: Set up a polling interval to keep the badge synced across all pages
+    const syncInterval = setInterval(fetchHeaderData, 3000);
+
+    // Cleanup interval on unmount
+    return () => clearInterval(syncInterval);
+  }, [router, pathname]);
 
   const handleSignOut = async () => {
     const token = localStorage.getItem('token');
@@ -122,7 +130,7 @@ export default function DonorLayout({ children }: { children: React.ReactNode })
           </div>
           <div>
             <h1 className="text-base font-extrabold tracking-tight text-slate-900 leading-tight">
-              Xintrex Hospital · Blood Donor Network
+              Divided and Unpopular Hospital · Blood Donor Network
             </h1>
             <p className="text-[11px] font-medium text-slate-500 flex items-center gap-1.5">
               <span>Donate · Refer · Save Lives</span>

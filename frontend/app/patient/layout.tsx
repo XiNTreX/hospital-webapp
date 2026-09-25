@@ -59,6 +59,7 @@ export default function PatientLayout({ children }: { children: React.ReactNode 
   localStorage.removeItem('role');
   router.push('/login');
 };
+
   const navItems = [
     { label: 'Dashboard', href: '/patient/dashboard', icon: '📊' },
     { label: 'View Doctors List', href: '/patient/doctors', icon: '🩺' },
@@ -69,7 +70,6 @@ export default function PatientLayout({ children }: { children: React.ReactNode 
     { label: 'Past Test Reports', href: '/patient/reports/past', icon: '📁' },
     { label: 'Past Blood Requests', href: '/patient/blood-requests', icon: '🩸' },
     { label: 'Past Ambulance Requests', href: '/patient/ambulance-requests', icon: '🚑' },
-    { label: 'Admission History', href: '/patient/admissions', icon: '🏥' },
   ];
 
   if (!isAuthorized) {

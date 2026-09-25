@@ -3,21 +3,20 @@ const router = express.Router();
 const pool = require('../config/db');
 const bcrypt = require('bcryptjs');
 const { verifyToken, verifyAdmin } = require('../middleware/auth');
+
 // ==========================================
 // GET /api/admin/stats (Dashboard Analytics)
 // ==========================================
 router.get('/stats', verifyToken, async (req, res) => {
   try {
-    const patientsCount = await pool.query(`SELECT COUNT(*) FROM "PATIENT"`);
-    const doctorsCount = await pool.query(`SELECT COUNT(*) FROM "DOCTOR"`);
-    const appointmentsCount = await pool.query(`SELECT COUNT(*) FROM "APPOINTMENT"`);
-    const pendingTestsCount = await pool.query(`SELECT COUNT(*) FROM "TEST_REPORT" WHERE status != 'Completed'`);
+    const result = await pool.query('SELECT * FROM get_admin_dashboard_stats()');
+    const stats = result.rows[0];
 
     res.json({
-      totalPatients: parseInt(patientsCount.rows[0].count),
-      totalDoctors: parseInt(doctorsCount.rows[0].count),
-      totalAppointments: parseInt(appointmentsCount.rows[0].count),
-      pendingTests: parseInt(pendingTestsCount.rows[0].count),
+      totalPatients: parseInt(stats.total_patients),
+      totalDoctors: parseInt(stats.total_doctors),
+      totalAppointments: parseInt(stats.total_appointments),
+      pendingTests: parseInt(stats.pending_tests),
     });
   } catch (err) {
     console.error('Error fetching admin stats:', err);
@@ -45,7 +44,7 @@ router.get('/doctors', verifyToken, async (req, res) => {
 // ==========================================
 // POST /api/admin/doctors (Onboard New Doctor)
 // ==========================================
-router.post('/doctors', verifyToken, async (req, res) => {
+router.post('/doctors', verifyToken, verifyAdmin, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -94,7 +93,7 @@ router.get('/tests', verifyToken, async (req, res) => {
 // ==========================================
 // POST /api/admin/tests (Add a new test)
 // ==========================================
-router.post('/tests', verifyToken, async (req, res) => {
+router.post('/tests', verifyToken, verifyAdmin, async (req, res) => {
   try {
     const { name, cost } = req.body;
     const result = await pool.query(
@@ -124,7 +123,7 @@ router.get('/medicines', verifyToken, async (req, res) => {
 // ==========================================
 // POST /api/admin/medicines (Add a new medicine)
 // ==========================================
-router.post('/medicines', verifyToken, async (req, res) => {
+router.post('/medicines', verifyToken, verifyAdmin, async (req, res) => {
   try {
     const { name, generic_name, description } = req.body;
     const result = await pool.query(
@@ -137,6 +136,7 @@ router.post('/medicines', verifyToken, async (req, res) => {
     res.status(500).json({ error: 'Server error creating medicine' });
   }
 });
+
 // ==========================================
 // GET /api/admin/driver-requests
 // ==========================================
@@ -160,72 +160,32 @@ router.get('/driver-requests', verifyToken, verifyAdmin, async (req, res) => {
 // POST /api/admin/driver-requests/:id/approve
 // ==========================================
 router.post('/driver-requests/:id/approve', verifyToken, verifyAdmin, async (req, res) => {
-  const client = await pool.connect();
   try {
     const requestId = parseInt(req.params.id);
 
-    await client.query('BEGIN');
-
-    const reqRow = await client.query(
-      `SELECT * FROM "DRIVER_SIGNUP_REQUEST" WHERE request_id = $1 FOR UPDATE`,
-      [requestId]
-    );
-    if (reqRow.rows.length === 0) {
-      await client.query('ROLLBACK');
-      return res.status(404).json({ error: 'Request not found' });
-    }
-    const r = reqRow.rows[0];
-    if (r.status !== 'Pending') {
-      await client.query('ROLLBACK');
-      return res.status(400).json({ error: `Request already ${r.status.toLowerCase()}.` });
-    }
-
-    // Look up admin_id of the reviewer
-    const adminRow = await client.query(
+    const adminRow = await pool.query(
       `SELECT admin_id FROM "ADMIN" WHERE account_id = $1`,
       [req.user.accountId]
     );
     const adminId = adminRow.rows[0]?.admin_id || null;
 
-    // 1. Create USER_ACCOUNT (reusing the stored password hash)
-    const acc = await client.query(
-      `INSERT INTO "USER_ACCOUNT" (email, password_hash, user_type)
-       VALUES ($1, $2, 'DRIVER') RETURNING account_id`,
-      [r.email, r.password_hash]
-    );
+    await pool.query('CALL approve_driver($1, $2)', [requestId, adminId]);
 
-    // 2. Create DRIVER profile
-    await client.query(
-      `INSERT INTO "DRIVER" (first_name, last_name, license_no, phone, status, account_id)
-       VALUES ($1, $2, $3, $4, 'Available', $5)`,
-      [r.first_name, r.last_name, r.license_no, r.phone, acc.rows[0].account_id]
-    );
-
-    // 3. Mark request approved
-    await client.query(
-      `UPDATE "DRIVER_SIGNUP_REQUEST"
-       SET status = 'Approved', reviewed_at = CURRENT_TIMESTAMP, reviewed_by = $1
-       WHERE request_id = $2`,
-      [adminId, requestId]
-    );
-
-    await client.query('COMMIT');
     res.json({ message: 'Driver approved and account created.' });
   } catch (err) {
-    await client.query('ROLLBACK');
     console.error('Approve driver error:', err);
+    if (err.message && err.message.includes('Pending request not found')) {
+      return res.status(404).json({ error: 'Request not found or already processed' });
+    }
     if (err.code === '23505') {
       return res.status(400).json({ error: 'A user with this email or license already exists.' });
     }
     res.status(500).json({ error: 'Server error' });
-  } finally {
-    client.release();
   }
 });
 
 // ==========================================
 // POST /api/admin/driver-requests/:id/reject
-// Body: { reason?: string }
 // ==========================================
 router.post('/driver-requests/:id/reject', verifyToken, verifyAdmin, async (req, res) => {
   try {
@@ -242,7 +202,7 @@ router.post('/driver-requests/:id/reject', verifyToken, verifyAdmin, async (req,
       `UPDATE "DRIVER_SIGNUP_REQUEST"
        SET status = 'Rejected',
            rejection_reason = $1,
-           reviewed_at = CURRENT_TIMESTAMP,
+           reviewed_at = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Dhaka'),
            reviewed_by = $2
        WHERE request_id = $3 AND status = 'Pending'
        RETURNING request_id`,
@@ -258,4 +218,5 @@ router.post('/driver-requests/:id/reject', verifyToken, verifyAdmin, async (req,
     res.status(500).json({ error: 'Server error' });
   }
 });
+
 module.exports = router;

@@ -26,25 +26,33 @@ export default function PatientDashboardPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
-  // Load patient details on mount
+  // Fetch real patient details directly from the backend API on mount
   useEffect(() => {
-    const storedUser = localStorage.getItem('userData');
-    if (storedUser) {
+    const fetchProfile = async () => {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+
       try {
-        const parsed = JSON.parse(storedUser);
-        setProfile((prev) => ({
-          ...prev,
-          firstName: parsed.firstName || '',
-          lastName: parsed.lastName || '',
-          email: parsed.email || '',
-          dob: parsed.dob || '',
-          gender: parsed.gender || 'Male',
-          emergencyPhone: parsed.emergencyPhone || '',
-        }));
-      } catch (e) {
-        console.error('Failed to parse cached user data', e);
+        const res = await fetch('http://localhost:5001/api/patient/profile', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setProfile({
+            firstName: data.first_name || data.firstName || '',
+            lastName: data.last_name || data.lastName || '',
+            email: data.email || '',
+            dob: data.dob ? data.dob.split('T')[0] : '',
+            gender: data.gender || 'Male',
+            emergencyPhone: data.emergency_phone || data.emergencyPhone || '',
+          });
+        }
+      } catch (err) {
+        console.error('Failed to fetch patient profile:', err);
       }
-    }
+    };
+
+    fetchProfile();
   }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -73,9 +81,6 @@ export default function PatientDashboardPage() {
       if (res.ok) {
         setMessage({ text: 'Profile updated successfully!', type: 'success' });
         setIsEditing(false);
-        // Sync local storage cache
-        const updatedUser = { ...JSON.parse(localStorage.getItem('userData') || '{}'), ...profile };
-        localStorage.setItem('userData', JSON.stringify(updatedUser));
       } else {
         setMessage({ text: data.error || 'Failed to update profile.', type: 'error' });
       }
@@ -98,7 +103,7 @@ export default function PatientDashboardPage() {
               🏥 Patient Portal Dashboard
             </span>
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
-              Welcome back, {profile.firstName || 'Patient'} {profile.lastName}
+              Welcome back, {profile.firstName ? `${profile.firstName} ${profile.lastName}` : 'Patient'}
             </h1>
             <p className="text-xs sm:text-sm text-slate-300 mt-1">
               Manage appointments, request emergency services, and view medical records.
@@ -110,23 +115,23 @@ export default function PatientDashboardPage() {
       {/* Dynamic Feedback Banner */}
       {message && (
         <div
-          className={`p-4 rounded-2xl border text-xs sm:text-sm font-medium ${message.type === 'success'
-            ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-            : 'bg-rose-50 border-rose-200 text-rose-800'
-            }`}
+          className={`p-4 rounded-2xl border text-xs sm:text-sm font-medium ${
+            message.type === 'success'
+              ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+              : 'bg-rose-50 border-rose-200 text-rose-800'
+          }`}
         >
           {message.text}
         </div>
       )}
 
-      {/* QUICK EMERGENCY & CARE ACTIONS (HIGH CONTRAST ICONS) */}
+      {/* QUICK EMERGENCY & CARE ACTIONS */}
       <div>
         <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-4">
           Quick Emergency & Care Actions
         </h2>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-
           {/* Book Appointment Card */}
           <Link
             href="/patient/appointments/book"
@@ -147,7 +152,7 @@ export default function PatientDashboardPage() {
 
           {/* Request for Blood Card */}
           <Link
-            href="/patient/blood-requests/new"  // 👈 This should link to /patient/blood-requests/new
+            href="/patient/blood-requests/new"
             className="group relative overflow-hidden rounded-3xl p-6 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl bg-gradient-to-br from-rose-600 via-pink-600 to-rose-500 text-white shadow-lg shadow-rose-500/20 border border-rose-400/30"
           >
             <div className="flex items-center gap-4 mb-4">
@@ -165,7 +170,7 @@ export default function PatientDashboardPage() {
 
           {/* Request for Ambulance Card */}
           <Link
-            href="/patient/ambulance-requests/new"  // 👈 This should link to /patient/ambulance-requests/new
+            href="/patient/ambulance-requests/new"
             className="group relative overflow-hidden rounded-3xl p-6 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl bg-gradient-to-br from-amber-600 via-orange-500 to-amber-500 text-white shadow-lg shadow-orange-500/20 border border-amber-400/30"
           >
             <div className="flex items-center gap-4 mb-4">
@@ -180,7 +185,6 @@ export default function PatientDashboardPage() {
               Dispatch emergency transit to your live location.
             </p>
           </Link>
-
         </div>
       </div>
 
@@ -235,7 +239,7 @@ export default function PatientDashboardPage() {
               <input
                 type="email"
                 name="email"
-                disabled // Email address remains static/read-only
+                disabled
                 value={profile.email}
                 className="w-full rounded-xl border border-slate-200 bg-slate-100 px-4 py-3 text-sm text-slate-500 cursor-not-allowed"
               />

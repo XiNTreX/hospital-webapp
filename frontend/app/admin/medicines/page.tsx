@@ -124,7 +124,8 @@ export default function AdminMedicinesPage() {
                   required
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="w-full p-3 border border-slate-300 rounded-xl text-sm focus:outline-none focus:border-indigo-500"
+                  style={{ color: '#000000' }}
+                  className="w-full p-3 border border-slate-300 rounded-xl text-sm placeholder:text-slate-400 focus:outline-none focus:border-indigo-500"
                   placeholder="e.g. Napa Extra"
                 />
               </div>
@@ -135,7 +136,8 @@ export default function AdminMedicinesPage() {
                   type="text"
                   value={genericName}
                   onChange={(e) => setGenericName(e.target.value)}
-                  className="w-full p-3 border border-slate-300 rounded-xl text-sm focus:outline-none focus:border-indigo-500"
+                  style={{ color: '#000000' }}
+                  className="w-full p-3 border border-slate-300 rounded-xl text-sm placeholder:text-slate-400 focus:outline-none focus:border-indigo-500"
                   placeholder="e.g. Paracetamol + Caffeine"
                 />
               </div>
@@ -146,7 +148,8 @@ export default function AdminMedicinesPage() {
                   rows={2}
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  className="w-full p-3 border border-slate-300 rounded-xl text-sm focus:outline-none focus:border-indigo-500"
+                  style={{ color: '#000000' }}
+                  className="w-full p-3 border border-slate-300 rounded-xl text-sm placeholder:text-slate-400 focus:outline-none focus:border-indigo-500"
                   placeholder="e.g. 500mg tablet"
                 />
               </div>

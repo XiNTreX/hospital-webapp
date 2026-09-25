@@ -71,7 +71,7 @@ export default function PastTestReportsPage() {
               <div className="border-b border-slate-100 pb-4">
                 <h3 className="text-lg font-black text-blue-700">{report.test_name}</h3>
                 <p className="text-xs text-slate-500 mt-1">Prescribed by Dr. {report.doc_first} {report.doc_last}</p>
-                <p className="text-xs font-bold text-slate-400 mt-1">Date: {report.date.split('T')[0]}</p>
+                <p className="text-xs font-bold text-slate-400 mt-1">Date: {new Date(report.date).toLocaleDateString('en-CA')}</p>
               </div>
 
               <button
@@ -92,7 +92,7 @@ export default function PastTestReportsPage() {
             <div className="flex justify-between items-center border-b border-slate-200 pb-4 mb-6">
               <div>
                 <h2 className="text-xl font-black text-slate-900">{selectedReport.test_name}</h2>
-                <p className="text-xs text-slate-500 mt-0.5">Date: {selectedReport.date.split('T')[0]}</p>
+                <p className="text-xs text-slate-500 mt-0.5">Date: {new Date(selectedReport.date).toLocaleDateString('en-CA')}</p>
               </div>
               <button onClick={() => setSelectedReport(null)} className="text-slate-400 hover:text-slate-700 font-bold text-xl">✕</button>
             </div>
