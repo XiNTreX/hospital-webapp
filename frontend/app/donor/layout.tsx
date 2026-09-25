@@ -9,6 +9,7 @@ export default function DonorLayout({ children }: { children: React.ReactNode })
   const router = useRouter();
   const [donorName, setDonorName] = useState('Donor');
   const [isAuthorized, setIsAuthorized] = useState(false);
+  const [pendingReferrals, setPendingReferrals] = useState(0);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -23,20 +24,33 @@ export default function DonorLayout({ children }: { children: React.ReactNode })
     }
     setIsAuthorized(true);
 
-    const fetchName = async () => {
+    const fetchHeaderData = async () => {
       try {
-        const res = await fetch('http://localhost:5001/api/donor/profile', {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (res.ok) {
-          const data = await res.json();
+        const [profRes, refRes] = await Promise.all([
+          fetch('http://localhost:5001/api/donor/profile', {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+          fetch('http://localhost:5001/api/donor/referrals/incoming', {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+        ]);
+        if (profRes.ok) {
+          const data = await profRes.json();
           setDonorName(`${data.first_name} ${data.last_name}`);
+        }
+        if (refRes.ok) {
+          const refs = await refRes.json();
+          setPendingReferrals(
+            refs.filter(
+              (r: any) => r.status === 'Pending' || r.status === 'Pledged'
+            ).length
+          );
         }
       } catch {
         /* silent */
       }
     };
-    fetchName();
+    fetchHeaderData();
   }, [router]);
 
   const handleSignOut = async () => {
@@ -59,6 +73,12 @@ export default function DonorLayout({ children }: { children: React.ReactNode })
   const navItems = [
     { label: 'Dashboard', href: '/donor/dashboard', icon: '📊' },
     { label: 'Available Requests', href: '/donor/requests', icon: '🔔' },
+    {
+      label: 'Referred Requests',
+      href: '/donor/referred-requests',
+      icon: '📨',
+      badge: pendingReferrals,
+    },
     { label: 'My Donations', href: '/donor/donations', icon: '✅' },
     { label: 'Referred Donations', href: '/donor/referred', icon: '👥' },
   ];
@@ -117,7 +137,12 @@ export default function DonorLayout({ children }: { children: React.ReactNode })
           className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl border border-rose-200 bg-rose-50/50 text-rose-600 text-xs font-bold hover:bg-rose-100 hover:text-rose-700 transition"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="2"
+              d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+            />
           </svg>
           <span>Sign Out</span>
         </button>
@@ -142,7 +167,12 @@ export default function DonorLayout({ children }: { children: React.ReactNode })
                   }`}
                 >
                   <span className="text-base">{item.icon}</span>
-                  <span className="truncate">{item.label}</span>
+                  <span className="truncate flex-1">{item.label}</span>
+                  {item.badge && item.badge > 0 ? (
+                    <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-red-500 text-white text-[10px] font-black flex items-center justify-center">
+                      {item.badge}
+                    </span>
+                  ) : null}
                 </Link>
               );
             })}

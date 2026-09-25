@@ -27,7 +27,7 @@ export default function RegisterPage() {
     licenseNo: '',
     vehicleType: 'Standard Ambulance',
     // Agreements
-    agreeTerms: false,
+    agreedToTerms: false,
   });
 
   const [showPassword, setShowPassword] = useState(false);
@@ -82,8 +82,8 @@ export default function RegisterPage() {
       return 'Both Phone Number and Driver License Number are required for emergency drivers.';
     }
 
-    if (!formData.agreeTerms) {
-      return 'You must accept the HIPAA privacy guidelines and terms of service.';
+    if (!formData.agreedToTerms) {
+      return 'You must accept the Terms & Conditions to create an account.';
     }
 
     return null;
@@ -512,14 +512,23 @@ export default function RegisterPage() {
             <div className="flex items-start gap-3 pt-2">
               <input
                 type="checkbox"
-                id="agreeTerms"
-                name="agreeTerms"
-                checked={formData.agreeTerms}
+                id="agreedToTerms"
+                name="agreedToTerms"
+                checked={formData.agreedToTerms}
                 onChange={handleChange}
-                className="mt-1 h-4 w-4 rounded border-slate-300 bg-white text-blue-600 focus:ring-blue-500"
+                className="mt-1 h-4 w-4 rounded border-slate-300 bg-white text-blue-600 focus:ring-blue-500 cursor-pointer"
               />
-              <label htmlFor="agreeTerms" className="text-xs text-slate-500 leading-relaxed cursor-pointer">
-                I agree to the <span className="text-blue-600 underline">Divided and Unpopular Healthcare Terms of Service</span> and acknowledge privacy protocols regarding medical dispatch logs.
+              <label htmlFor="agreedToTerms" className="text-xs text-slate-500 leading-relaxed cursor-pointer">
+                I agree to the{' '}
+                <Link
+                  href="/terms"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-600 underline font-semibold hover:text-blue-700"
+                >
+                  Terms &amp; Conditions
+                </Link>{' '}
+                and acknowledge privacy protocols regarding medical dispatch logs.
               </label>
             </div>
           </div>
@@ -527,7 +536,7 @@ export default function RegisterPage() {
           {/* Submit Action Button */}
           <button
             type="submit"
-            disabled={isSubmitting || (hasStartedTyping && (!isPasswordValid || !passwordsMatch))}
+            disabled={isSubmitting || !formData.agreedToTerms || (hasStartedTyping && (!isPasswordValid || !passwordsMatch))}
             className="w-full mt-4 py-3.5 px-4 rounded-xl bg-gradient-to-r from-blue-600 via-sky-500 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white font-extrabold transition duration-200 shadow-xl shadow-blue-500/25 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm uppercase tracking-wider"
           >
             {isSubmitting ? (

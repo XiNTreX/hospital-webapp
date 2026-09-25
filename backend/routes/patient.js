@@ -1,7 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../config/db');
-const { verifyToken } = require('../middleware/auth');const { todayDhaka } = require('../utils/dhakaTime');
+const { verifyToken } = require('../middleware/auth');
+const { todayDhaka, oneMonthFromTodayDhaka, daysBetween } = require('../utils/dhakaTime');
 
 // ==========================================
 // GET /api/patient/profile
@@ -39,8 +40,8 @@ router.put('/profile', verifyToken, async (req, res) => {
     const { first_name, last_name, dob, gender, phone, blood_group, address } = req.body;
 
     await pool.query(
-      `UPDATE "PATIENT" 
-       SET first_name = $1, last_name = $2, dob = $3, gender = $4, 
+      `UPDATE "PATIENT"
+       SET first_name = $1, last_name = $2, dob = $3, gender = $4,
            phone = $5, blood_group = $6, address = $7
        WHERE account_id = $8`,
       [first_name, last_name, dob, gender, phone, blood_group, address, accountId]
@@ -59,7 +60,7 @@ router.put('/profile', verifyToken, async (req, res) => {
 router.get('/doctors', verifyToken, async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT doctor_id, first_name, last_name, specialization, degrees, 
+      `SELECT doctor_id, first_name, last_name, specialization, degrees,
               email, phone, room_number, fee, status, photo_url
        FROM "DOCTOR"
        WHERE status = 'Active'
@@ -71,20 +72,18 @@ router.get('/doctors', verifyToken, async (req, res) => {
     res.status(500).json({ error: 'Server error' });
   }
 });
+
 // ==========================================
 // GET /api/patient/appointments/slots
-// Query: doctorId, date (YYYY-MM-DD)
 // ==========================================
 router.get('/appointments/slots', verifyToken, async (req, res) => {
   try {
     const { doctorId, date } = req.query;
 
-    // Validate inputs
     if (!doctorId || !date) {
       return res.status(400).json({ error: 'doctorId and date are required' });
     }
 
-    // Check if date is valid and within 1 month
     const selectedDate = new Date(date);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -98,15 +97,10 @@ router.get('/appointments/slots', verifyToken, async (req, res) => {
       return res.status(400).json({ error: 'Bookings only allowed up to 1 month in advance' });
     }
 
-    // Get available sessions
     const { getAvailableSessions } = require('../utils/schedule');
     const sessions = await getAvailableSessions(parseInt(doctorId), date, pool);
 
-    res.json({
-      doctorId: parseInt(doctorId),
-      date,
-      sessions
-    });
+    res.json({ doctorId: parseInt(doctorId), date, sessions });
   } catch (err) {
     console.error('Slots error:', err);
     res.status(500).json({ error: 'Server error' });
@@ -123,14 +117,14 @@ router.get('/appointments/pending', verifyToken, async (req, res) => {
 
     const result = await pool.query(
       `SELECT a.appointment_id, a.date, a.time, a.serial_no, a.status,
-              a.doctor_id,  -- 👈 ADD THIS
+              a.doctor_id,
               d.first_name as doctor_first, d.last_name as doctor_last,
               d.specialization, d.room_number, d.photo_url
        FROM "APPOINTMENT" a
        JOIN "DOCTOR" d ON a.doctor_id = d.doctor_id
        JOIN "PATIENT" p ON a.patient_id = p.patient_id
-       WHERE p.account_id = $1 
-         AND a.status = 'Scheduled' 
+       WHERE p.account_id = $1
+         AND a.status = 'Scheduled'
          AND a.date >= $2
        ORDER BY a.date ASC, a.time ASC`,
       [accountId, today]
@@ -142,9 +136,6 @@ router.get('/appointments/pending', verifyToken, async (req, res) => {
   }
 });
 
-// ==========================================
-// GET /api/patient/appointments/past
-// ==========================================
 // ==========================================
 // GET /api/patient/appointments/past
 // ==========================================
@@ -160,7 +151,7 @@ router.get('/appointments/past', verifyToken, async (req, res) => {
        FROM "APPOINTMENT" a
        JOIN "DOCTOR" d ON a.doctor_id = d.doctor_id
        JOIN "PATIENT" p ON a.patient_id = p.patient_id
-       WHERE p.account_id = $1 
+       WHERE p.account_id = $1
          AND a.status = 'Completed'
        ORDER BY a.date DESC, a.time DESC`,
       [accountId]
@@ -171,6 +162,7 @@ router.get('/appointments/past', verifyToken, async (req, res) => {
     res.status(500).json({ error: 'Server error' });
   }
 });
+
 // ==========================================
 // PUT /api/patient/appointments/:id/cancel
 // ==========================================
@@ -179,7 +171,6 @@ router.put('/appointments/:id/cancel', verifyToken, async (req, res) => {
     const { accountId } = req.user;
     const appointmentId = parseInt(req.params.id);
 
-    // First, verify this appointment belongs to this patient
     const checkResult = await pool.query(
       `SELECT a.appointment_id, a.status, a.date
        FROM "APPOINTMENT" a
@@ -194,18 +185,15 @@ router.put('/appointments/:id/cancel', verifyToken, async (req, res) => {
 
     const appointment = checkResult.rows[0];
 
-    // Check if appointment is already past
     const today = todayDhaka();
     if (appointment.date < today) {
       return res.status(400).json({ error: 'Cannot cancel past appointments' });
     }
 
-    // Check if already cancelled
     if (appointment.status === 'Cancelled') {
       return res.status(400).json({ error: 'Appointment is already cancelled' });
     }
 
-    // Update status to Cancelled
     await pool.query(
       `UPDATE "APPOINTMENT" SET status = 'Cancelled' WHERE appointment_id = $1`,
       [appointmentId]
@@ -215,12 +203,12 @@ router.put('/appointments/:id/cancel', verifyToken, async (req, res) => {
       message: 'Appointment cancelled successfully',
       appointment_id: appointmentId
     });
-
   } catch (err) {
     console.error('Cancel appointment error:', err);
     res.status(500).json({ error: 'Server error' });
   }
 });
+
 // ==========================================
 // POST /api/patient/appointments/book
 // ==========================================
@@ -230,12 +218,10 @@ router.post('/appointments/book', verifyToken, async (req, res) => {
     const { accountId } = req.user;
     const { doctorId, date, time } = req.body;
 
-    // Validate inputs
     if (!doctorId || !date || !time) {
       return res.status(400).json({ error: 'doctorId, date, and time are required' });
     }
 
-    // Check date validity (not past, not > 1 month)
     const selectedDate = new Date(date);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -251,7 +237,6 @@ router.post('/appointments/book', verifyToken, async (req, res) => {
 
     await client.query('BEGIN');
 
-    // Get patient_id from account_id
     const patientResult = await client.query(
       `SELECT patient_id FROM "PATIENT" WHERE account_id = $1`,
       [accountId]
@@ -263,9 +248,6 @@ router.post('/appointments/book', verifyToken, async (req, res) => {
     }
     const patientId = patientResult.rows[0].patient_id;
 
-    // ----------------------------------------------------
-    // NEW CHECK: Prevent duplicate active appointment with the same doctor
-    // ----------------------------------------------------
     const existingAppointment = await client.query(
       `SELECT appointment_id FROM "APPOINTMENT"
        WHERE patient_id = $1 AND doctor_id = $2 AND status = 'Scheduled'`,
@@ -278,9 +260,7 @@ router.post('/appointments/book', verifyToken, async (req, res) => {
         error: 'You already have an active appointment scheduled with this doctor. Please cancel or reschedule your existing appointment before booking a new one.'
       });
     }
-    // ----------------------------------------------------
 
-    // Check if the session is available
     const { isSessionAvailable, getNextSerial } = require('../utils/schedule');
     const available = await isSessionAvailable(parseInt(doctorId), date, time, pool);
     if (!available) {
@@ -288,10 +268,8 @@ router.post('/appointments/book', verifyToken, async (req, res) => {
       return res.status(409).json({ error: 'This session is fully booked. Please choose another time.' });
     }
 
-    // Get next serial number
     const serialNo = await getNextSerial(parseInt(doctorId), date, pool);
 
-    // Insert appointment
     await client.query(
       `INSERT INTO "APPOINTMENT" (date, time, serial_no, status, doctor_id, patient_id)
        VALUES ($1, $2, $3, 'Scheduled', $4, $5)`,
@@ -313,7 +291,9 @@ router.post('/appointments/book', verifyToken, async (req, res) => {
   } finally {
     client.release();
   }
-});// ==========================================
+});
+
+// ==========================================
 // GET /api/patient/tests
 // ==========================================
 router.get('/tests', verifyToken, async (req, res) => {
@@ -325,6 +305,7 @@ router.get('/tests', verifyToken, async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch medical tests' });
   }
 });
+
 // ==========================================
 // PUT /api/patient/appointments/:id/reschedule
 // ==========================================
@@ -339,26 +320,20 @@ router.put('/appointments/:id/reschedule', verifyToken, async (req, res) => {
       return res.status(400).json({ error: 'Date and time are required for rescheduling' });
     }
 
-    // Validate date validity (not past, not > 1 month)
-    const { todayDhaka, daysBetween, oneMonthFromTodayDhaka } = require('../utils/dhakaTime');
-
     const today = todayDhaka();
     const maxDate = oneMonthFromTodayDhaka();
 
     if (daysBetween(today, date) > 0) {
-      // date is BEFORE today
       return res.status(400).json({ error: 'Cannot book appointments in the past' });
     }
     if (daysBetween(date, maxDate) > 0) {
-      // date is AFTER maxDate
       return res.status(400).json({ error: 'Bookings only allowed up to 1 month in advance' });
     }
 
     await client.query('BEGIN');
 
-    // Verify the appointment belongs to the patient and is currently Scheduled
     const aptResult = await client.query(
-      `SELECT a.appointment_id, a.doctor_id, a.status 
+      `SELECT a.appointment_id, a.doctor_id, a.status
        FROM "APPOINTMENT" a
        JOIN "PATIENT" p ON a.patient_id = p.patient_id
        WHERE a.appointment_id = $1 AND p.account_id = $2`,
@@ -378,7 +353,6 @@ router.put('/appointments/:id/reschedule', verifyToken, async (req, res) => {
 
     const doctorId = appointment.doctor_id;
 
-    // Check if the new slot is available
     const { isSessionAvailable } = require('../utils/schedule');
     const available = await isSessionAvailable(doctorId, date, time, pool);
     if (!available) {
@@ -386,7 +360,6 @@ router.put('/appointments/:id/reschedule', verifyToken, async (req, res) => {
       return res.status(409).json({ error: 'This time slot is fully booked. Please choose another time.' });
     }
 
-    // Update appointment date and time
     await client.query(
       `UPDATE "APPOINTMENT" SET date = $1, time = $2 WHERE appointment_id = $3`,
       [date, time, appointmentId]
@@ -399,7 +372,6 @@ router.put('/appointments/:id/reschedule', verifyToken, async (req, res) => {
       date,
       time
     });
-
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('Reschedule appointment error:', err);
@@ -408,28 +380,28 @@ router.put('/appointments/:id/reschedule', verifyToken, async (req, res) => {
     client.release();
   }
 });
+
 // ==========================================
 // GET /api/patient/reports/pending
 // ==========================================
 router.get('/reports/pending', verifyToken, async (req, res) => {
   try {
-    const { accountId } = req.user;
-
     const result = await pool.query(
-      `SELECT tr.report_id, t.name as test_name, tr.date, tr.status,
-              d.first_name as doctor_first, d.last_name as doctor_last
+      `SELECT tr.report_id, tr.date, tr.status,
+              t.name AS test_name,
+              d.first_name AS doc_first, d.last_name AS doc_last
        FROM "TEST_REPORT" tr
        JOIN "TEST" t ON tr.test_id = t.test_id
        JOIN "DOCTOR" d ON tr.doctor_id = d.doctor_id
        JOIN "PATIENT" p ON tr.patient_id = p.patient_id
-       WHERE p.account_id = $1 AND tr.status = 'Pending'
+       WHERE p.account_id = $1 AND tr.status IN ('Pending', 'Prescribed', 'Specimen Received')
        ORDER BY tr.date DESC`,
-      [accountId]
+      [req.user.accountId]
     );
     res.json(result.rows);
   } catch (err) {
-    console.error('Pending reports error:', err);
-    res.status(500).json({ error: 'Server error' });
+    console.error('Error fetching pending reports:', err);
+    res.status(500).json({ error: 'Server error fetching pending reports' });
   }
 });
 
@@ -438,53 +410,152 @@ router.get('/reports/pending', verifyToken, async (req, res) => {
 // ==========================================
 router.get('/reports/past', verifyToken, async (req, res) => {
   try {
-    const { accountId } = req.user;
-
     const result = await pool.query(
-      `SELECT tr.report_id, t.name as test_name, tr.date, tr.result, tr.status,
-              d.first_name as doctor_first, d.last_name as doctor_last
+      `SELECT tr.report_id, tr.date, tr.result,
+              t.name AS test_name,
+              d.first_name AS doc_first, d.last_name AS doc_last, d.specialization
        FROM "TEST_REPORT" tr
        JOIN "TEST" t ON tr.test_id = t.test_id
        JOIN "DOCTOR" d ON tr.doctor_id = d.doctor_id
        JOIN "PATIENT" p ON tr.patient_id = p.patient_id
        WHERE p.account_id = $1 AND tr.status = 'Completed'
        ORDER BY tr.date DESC`,
-      [accountId]
+      [req.user.accountId]
     );
     res.json(result.rows);
   } catch (err) {
-    console.error('Past reports error:', err);
-    res.status(500).json({ error: 'Server error' });
+    console.error('Error fetching past reports:', err);
+    res.status(500).json({ error: 'Server error fetching reports' });
+  }
+});
+
+// ==========================================
+// POST /api/patient/reports/submit-specimen
+// ==========================================
+router.post('/reports/submit-specimen', verifyToken, async (req, res) => {
+  try {
+    const { report_id } = req.body;
+    await pool.query(
+      `UPDATE "TEST_REPORT" SET status = 'Specimen Received' WHERE report_id = $1`,
+      [report_id]
+    );
+    res.json({ message: 'Specimen submitted successfully' });
+  } catch (err) {
+    console.error('Error submitting specimen:', err);
+    res.status(500).json({ error: 'Server error submitting specimen' });
+  }
+});
+
+// ==========================================
+// GET /api/patient/reports/:reportId/details
+// ==========================================
+router.get('/reports/:reportId/details', verifyToken, async (req, res) => {
+  try {
+    const { reportId } = req.params;
+    const result = await pool.query(
+      `SELECT tp.parameter_name, tp.normal_range, trd.result_value
+       FROM "TEST_REPORT_DETAIL" trd
+       JOIN "TEST_PARAMETER" tp ON trd.parameter_id = tp.parameter_id
+       WHERE trd.report_id = $1`,
+      [reportId]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error fetching report details:', err);
+    res.status(500).json({ error: 'Server error fetching details' });
   }
 });
 
 // ==========================================
 // GET /api/patient/blood-requests
-// ==========================================
-// ==========================================
-// GET /api/patient/blood-requests
+// Includes units_pending and a computed "days_left" hint.
 // ==========================================
 router.get('/blood-requests', verifyToken, async (req, res) => {
   try {
     const { accountId } = req.user;
+    const today = todayDhaka();
 
     const result = await pool.query(
-      `SELECT br.request_id, br.blood_group_needed, br.units_needed, 
-       br.units_pledged, br.units_fulfilled,
-       br.request_date, br.need_date, br.status, br.patient_notes,
-       p.first_name, p.last_name
+      `SELECT br.request_id, br.blood_group_needed, br.units_needed,
+              br.units_pledged, br.units_fulfilled,
+              COALESCE(br.units_pending, 0) AS units_pending,
+              br.request_date, br.need_date, br.status, br.patient_notes,
+              p.first_name, p.last_name
        FROM "BLOOD_REQUEST" br
        JOIN "PATIENT" p ON br.patient_id = p.patient_id
        WHERE p.account_id = $1
        ORDER BY br.request_date DESC`,
       [accountId]
     );
-    res.json(result.rows);
+
+    // Annotate days_left so the frontend doesn't need to recompute it
+    const rows = result.rows.map((r) => {
+      const need = r.need_date instanceof Date
+        ? r.need_date.toISOString().split('T')[0]
+        : String(r.need_date).split('T')[0];
+      return {
+        ...r,
+        need_date: need,
+        days_left: daysBetween(need, today) * -1, // positive = days remaining
+      };
+    });
+
+    res.json(rows);
   } catch (err) {
     console.error('Blood requests error:', err);
     res.status(500).json({ error: 'Server error' });
   }
 });
+
+// ==========================================
+// PUT /api/patient/blood-requests/:id/extend
+// Body: { needDate: 'YYYY-MM-DD' }
+// ==========================================
+router.put('/blood-requests/:id/extend', verifyToken, async (req, res) => {
+  try {
+    const { accountId } = req.user;
+    const requestId = parseInt(req.params.id);
+    const { needDate } = req.body;
+
+    if (!needDate) {
+      return res.status(400).json({ error: 'New need date is required.' });
+    }
+
+    const today = todayDhaka();
+    if (needDate < today) {
+      return res.status(400).json({ error: 'New need date cannot be in the past.' });
+    }
+
+    // Verify ownership
+    const check = await pool.query(
+      `SELECT br.request_id, br.status
+       FROM "BLOOD_REQUEST" br
+       JOIN "PATIENT" p ON br.patient_id = p.patient_id
+       WHERE br.request_id = $1 AND p.account_id = $2`,
+      [requestId, accountId]
+    );
+
+    if (check.rows.length === 0) {
+      return res.status(404).json({ error: 'Blood request not found.' });
+    }
+    if (check.rows[0].status !== 'Pending') {
+      return res.status(400).json({
+        error: 'Only pending requests can have their deadline extended.',
+      });
+    }
+
+    await pool.query(
+      `UPDATE "BLOOD_REQUEST" SET need_date = $1 WHERE request_id = $2`,
+      [needDate, requestId]
+    );
+
+    res.json({ message: 'Deadline extended successfully.', need_date: needDate });
+  } catch (err) {
+    console.error('Extend request error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // ==========================================
 // PUT /api/patient/blood-requests/:id/cancel
 // ==========================================
@@ -493,7 +564,6 @@ router.put('/blood-requests/:id/cancel', verifyToken, async (req, res) => {
     const { accountId } = req.user;
     const requestId = parseInt(req.params.id);
 
-    // Verify this blood request belongs to this patient
     const checkResult = await pool.query(
       `SELECT br.request_id, br.status, br.units_pledged
        FROM "BLOOD_REQUEST" br
@@ -537,6 +607,7 @@ router.put('/blood-requests/:id/cancel', verifyToken, async (req, res) => {
     res.status(500).json({ error: 'Server error' });
   }
 });
+
 // ==========================================
 // POST /api/patient/blood-requests
 // ==========================================
@@ -545,23 +616,19 @@ router.post('/blood-requests', verifyToken, async (req, res) => {
     const { accountId } = req.user;
     const { bloodGroup, units, needDate, patientNotes } = req.body;
 
-    // Validate inputs
     if (!bloodGroup || !units || !needDate) {
       return res.status(400).json({ error: 'Blood group, units, and need date are required' });
     }
 
-    // Validate units (minimum 1, maximum 5 per request)
     if (units < 1 || units > 5) {
       return res.status(400).json({ error: 'Units must be between 1 and 5' });
     }
 
-    // Validate date (cannot be in the past)
     const today = todayDhaka();
     if (needDate < today) {
       return res.status(400).json({ error: 'Need date cannot be in the past' });
     }
 
-    // Get patient_id from account_id
     const patientResult = await pool.query(
       `SELECT patient_id FROM "PATIENT" WHERE account_id = $1`,
       [accountId]
@@ -573,9 +640,8 @@ router.post('/blood-requests', verifyToken, async (req, res) => {
 
     const patientId = patientResult.rows[0].patient_id;
 
-    // Insert blood request with status 'Pending'
     const result = await pool.query(
-      `INSERT INTO "BLOOD_REQUEST" 
+      `INSERT INTO "BLOOD_REQUEST"
        (blood_group_needed, units_needed, need_date, status, patient_id, patient_notes)
        VALUES ($1, $2, $3, 'Pending', $4, $5)
        RETURNING request_id, request_date`,
@@ -587,14 +653,12 @@ router.post('/blood-requests', verifyToken, async (req, res) => {
       request_id: result.rows[0].request_id,
       request_date: result.rows[0].request_date
     });
-
   } catch (err) {
     console.error('Blood request error:', err);
     res.status(500).json({ error: 'Server error' });
   }
 });
 
-// ==========================================
 // ==========================================
 // GET /api/patient/ambulance-requests
 // ==========================================
@@ -603,7 +667,7 @@ router.get('/ambulance-requests', verifyToken, async (req, res) => {
     const { accountId } = req.user;
 
     const result = await pool.query(
-      `SELECT ar.request_id, ar.pickup_location, ar.drop_location, 
+      `SELECT ar.request_id, ar.pickup_location, ar.drop_location,
               ar.request_time, ar.status, ar.patient_notes,
               p.first_name, p.last_name
        FROM "AMBULANCE_REQUEST" ar
@@ -627,12 +691,10 @@ router.post('/ambulance-requests', verifyToken, async (req, res) => {
     const { accountId } = req.user;
     const { pickupLocation, dropLocation, patientNotes } = req.body;
 
-    // Validate inputs
     if (!pickupLocation || !dropLocation) {
       return res.status(400).json({ error: 'Pickup and drop locations are required' });
     }
 
-    // Get patient_id from account_id
     const patientResult = await pool.query(
       `SELECT patient_id FROM "PATIENT" WHERE account_id = $1`,
       [accountId]
@@ -644,9 +706,8 @@ router.post('/ambulance-requests', verifyToken, async (req, res) => {
 
     const patientId = patientResult.rows[0].patient_id;
 
-    // Insert ambulance request with status 'Pending'
     const result = await pool.query(
-      `INSERT INTO "AMBULANCE_REQUEST" 
+      `INSERT INTO "AMBULANCE_REQUEST"
        (pickup_location, drop_location, status, patient_id, patient_notes)
        VALUES ($1, $2, 'Pending', $3, $4)
        RETURNING request_id, request_time`,
@@ -658,7 +719,6 @@ router.post('/ambulance-requests', verifyToken, async (req, res) => {
       request_id: result.rows[0].request_id,
       request_time: result.rows[0].request_time
     });
-
   } catch (err) {
     console.error('Ambulance request error:', err);
     res.status(500).json({ error: 'Server error' });
@@ -673,7 +733,6 @@ router.put('/ambulance-requests/:id/cancel', verifyToken, async (req, res) => {
     const { accountId } = req.user;
     const requestId = parseInt(req.params.id);
 
-    // Verify this request belongs to this patient
     const checkResult = await pool.query(
       `SELECT ar.request_id, ar.status
        FROM "AMBULANCE_REQUEST" ar
@@ -695,7 +754,7 @@ router.put('/ambulance-requests/:id/cancel', verifyToken, async (req, res) => {
           : 'A driver has already accepted this ride. It can no longer be cancelled.'
       });
     }
-    // Update status to Cancelled
+
     await pool.query(
       `UPDATE "AMBULANCE_REQUEST" SET status = 'Cancelled' WHERE request_id = $1`,
       [requestId]
@@ -705,7 +764,6 @@ router.put('/ambulance-requests/:id/cancel', verifyToken, async (req, res) => {
       message: 'Ambulance request cancelled successfully',
       request_id: requestId
     });
-
   } catch (err) {
     console.error('Cancel ambulance request error:', err);
     res.status(500).json({ error: 'Server error' });
@@ -734,6 +792,7 @@ router.get('/admissions', verifyToken, async (req, res) => {
     res.status(500).json({ error: 'Server error' });
   }
 });
+
 // ==========================================
 // GET /api/patient/prescriptions/:appointmentId
 // ==========================================
@@ -742,7 +801,6 @@ router.get('/prescriptions/:appointmentId', verifyToken, async (req, res) => {
     const { appointmentId } = req.params;
     const { accountId } = req.user;
 
-    // 1. Get Base Prescription
     const presRes = await pool.query(
       `SELECT pr.*, d.first_name as doc_first, d.last_name as doc_last, d.specialization
        FROM "PRESCRIPTION" pr
@@ -755,7 +813,6 @@ router.get('/prescriptions/:appointmentId', verifyToken, async (req, res) => {
     if (presRes.rows.length === 0) return res.status(404).json({ error: 'Prescription not found' });
     const prescription = presRes.rows[0];
 
-    // 2. Get Medicines
     const medRes = await pool.query(
       `SELECT pm.frequency, pm.duration, pm.before_after_meal, m.name, m.dosage
        FROM "PRESCRIPTION_MEDICINE" pm
@@ -764,7 +821,6 @@ router.get('/prescriptions/:appointmentId', verifyToken, async (req, res) => {
       [prescription.prescription_id]
     );
 
-    // 3. Get Advised Tests (Matching patient, doctor, and date)
     const testRes = await pool.query(
       `SELECT t.name FROM "TEST_REPORT" tr
        JOIN "TEST" t ON tr.test_id = t.test_id
@@ -782,86 +838,5 @@ router.get('/prescriptions/:appointmentId', verifyToken, async (req, res) => {
     res.status(500).json({ error: 'Server error' });
   }
 });
-// ==========================================
-// GET /api/patient/reports/past
-// ==========================================
-router.get('/reports/past', verifyToken, async (req, res) => {
-  try {
-    const result = await pool.query(
-      `SELECT tr.report_id, tr.date, tr.result, 
-              t.name AS test_name, 
-              d.first_name AS doc_first, d.last_name AS doc_last, d.specialization
-       FROM "TEST_REPORT" tr
-       JOIN "TEST" t ON tr.test_id = t.test_id
-       JOIN "DOCTOR" d ON tr.doctor_id = d.doctor_id
-       JOIN "PATIENT" p ON tr.patient_id = p.patient_id
-       WHERE p.account_id = $1 AND tr.status = 'Completed'
-       ORDER BY tr.date DESC`,
-      [req.user.accountId]
-    );
-    res.json(result.rows);
-  } catch (err) {
-    console.error('Error fetching past reports:', err);
-    res.status(500).json({ error: 'Server error fetching reports' });
-  }
-});
-// ==========================================
-// GET /api/patient/reports/pending
-// ==========================================
-router.get('/reports/pending', verifyToken, async (req, res) => {
-  try {
-    const result = await pool.query(
-      `SELECT tr.report_id, tr.date, tr.status, 
-              t.name AS test_name, 
-              d.first_name AS doc_first, d.last_name AS doc_last
-       FROM "TEST_REPORT" tr
-       JOIN "TEST" t ON tr.test_id = t.test_id
-       JOIN "DOCTOR" d ON tr.doctor_id = d.doctor_id
-       JOIN "PATIENT" p ON tr.patient_id = p.patient_id
-       WHERE p.account_id = $1 AND tr.status IN ('Pending', 'Prescribed', 'Specimen Received')
-       ORDER BY tr.date DESC`,
-      [req.user.accountId]
-    );
-    res.json(result.rows);
-  } catch (err) {
-    console.error('Error fetching pending reports:', err);
-    res.status(500).json({ error: 'Server error fetching pending reports' });
-  }
-});
 
-// ==========================================
-// POST /api/patient/reports/submit-specimen
-// ==========================================
-router.post('/reports/submit-specimen', verifyToken, async (req, res) => {
-  try {
-    const { report_id } = req.body;
-    await pool.query(
-      `UPDATE "TEST_REPORT" SET status = 'Specimen Received' WHERE report_id = $1`,
-      [report_id]
-    );
-    res.json({ message: 'Specimen submitted successfully' });
-  } catch (err) {
-    console.error('Error submitting specimen:', err);
-    res.status(500).json({ error: 'Server error submitting specimen' });
-  }
-});
-// ==========================================
-// GET /api/patient/reports/:reportId/details
-// ==========================================
-router.get('/reports/:reportId/details', verifyToken, async (req, res) => {
-  try {
-    const { reportId } = req.params;
-    const result = await pool.query(
-      `SELECT tp.parameter_name, tp.normal_range, trd.result_value
-       FROM "TEST_REPORT_DETAIL" trd
-       JOIN "TEST_PARAMETER" tp ON trd.parameter_id = tp.parameter_id
-       WHERE trd.report_id = $1`,
-      [reportId]
-    );
-    res.json(result.rows);
-  } catch (err) {
-    console.error('Error fetching report details:', err);
-    res.status(500).json({ error: 'Server error fetching details' });
-  }
-});
 module.exports = router;

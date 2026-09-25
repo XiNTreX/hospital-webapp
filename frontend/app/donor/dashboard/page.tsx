@@ -25,6 +25,7 @@ interface Stats {
   referred_fulfilled: string;
   self_active: string;
   referred_active: string;
+  donated_via_referral: string;
 }
 
 export default function DonorDashboard() {
@@ -258,7 +259,7 @@ export default function DonorDashboard() {
       {stats && (
         <div>
           <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-4">Your Impact</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
             <div className="rounded-2xl border border-red-200 bg-white p-5 shadow-sm">
               <p className="text-3xl mb-1">🩸</p>
               <p className="text-2xl font-black text-red-700">{stats.self_fulfilled}</p>
@@ -279,6 +280,11 @@ export default function DonorDashboard() {
               <p className="text-2xl font-black text-violet-700">{stats.referred_active}</p>
               <p className="text-xs text-slate-500 font-medium mt-1">Active referrals</p>
             </div>
+            <div className="rounded-2xl border border-pink-200 bg-white p-5 shadow-sm">
+              <p className="text-3xl mb-1">🎁</p>
+              <p className="text-2xl font-black text-pink-700">{stats.donated_via_referral}</p>
+              <p className="text-xs text-slate-500 font-medium mt-1">Donated via referral</p>
+            </div>
           </div>
         </div>
       )}
@@ -286,7 +292,7 @@ export default function DonorDashboard() {
       {/* Quick Actions */}
       <div>
         <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-4">Quick Actions</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-5">
           <Link
             href="/donor/requests"
             className="group relative overflow-hidden rounded-3xl p-5 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl bg-gradient-to-br from-red-700 via-red-600 to-rose-600 text-white shadow-lg shadow-red-500/20 border border-red-400/30"
@@ -297,7 +303,20 @@ export default function DonorDashboard() {
               </div>
               <h3 className="text-base font-bold text-white">Available Requests</h3>
             </div>
-            <p className="text-xs text-red-100 leading-relaxed">See pending blood requests matching your group.</p>
+            <p className="text-xs text-red-100 leading-relaxed">See pending blood requests.</p>
+          </Link>
+
+          <Link
+            href="/donor/referred-requests"
+            className="group relative overflow-hidden rounded-3xl p-5 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl bg-gradient-to-br from-violet-700 via-violet-600 to-fuchsia-600 text-white shadow-lg shadow-violet-500/20 border border-violet-400/30"
+          >
+            <div className="flex items-center gap-3 mb-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/95 text-xl shadow-md transition-transform group-hover:scale-110">
+                📨
+              </div>
+              <h3 className="text-base font-bold text-white">Referred Requests</h3>
+            </div>
+            <p className="text-xs text-violet-100 leading-relaxed">Donations you&apos;ve been referred to.</p>
           </Link>
 
           <Link

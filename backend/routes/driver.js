@@ -117,6 +117,17 @@ router.put('/status', verifyToken, async (req, res) => {
 // ==========================================
 router.get('/requests/available', verifyToken, async (req, res) => {
   try {
+    const driverId = await getDriverId(req.user.accountId);
+    if (!driverId) return res.status(404).json({ error: 'Driver not found' });
+
+    // 🔒 NEW: return empty if not Available
+    const statusRow = await pool.query(
+      `SELECT status FROM "DRIVER" WHERE driver_id = $1`,
+      [driverId]
+    );
+    if (statusRow.rows[0]?.status !== 'Available') {
+      return res.json([]);
+    }
     const result = await pool.query(
       `SELECT ar.request_id, ar.pickup_location, ar.drop_location,
               ar.request_time, ar.status, ar.patient_notes,
@@ -144,7 +155,21 @@ router.post('/requests/:id/accept', verifyToken, async (req, res) => {
     if (!driverId) return res.status(404).json({ error: 'Driver not found' });
 
     await client.query('BEGIN');
-
+    // 🔒 NEW: Driver must be Available (not Off Duty / On Trip)
+    const statusRow = await client.query(
+      `SELECT status FROM "DRIVER" WHERE driver_id = $1 FOR UPDATE`,
+      [driverId]
+    );
+    const driverStatus = statusRow.rows[0]?.status;
+    if (driverStatus !== 'Available') {
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        error:
+          driverStatus === 'Off Duty'
+            ? 'You are currently Off Duty. Toggle to Available before accepting rides.'
+            : `You cannot accept a ride while status is "${driverStatus}".`
+      });
+    }
     // 1. Driver can't already have an active ride
     const active = await client.query(
       `SELECT request_id FROM "AMBULANCE_REQUEST"

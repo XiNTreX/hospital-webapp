@@ -11,6 +11,7 @@ interface BloodRequest {
   units_needed: number;
   units_pledged: number;
   units_fulfilled: number;
+  units_pending: number;
   request_date: string;
   need_date: string;
   status: string;
@@ -20,15 +21,26 @@ interface BloodRequest {
   my_pledged_count: string;
 }
 
-interface ReferredDonor {
+interface ReferralCandidate {
+  donor_id: number;
   name: string;
-  phone: string;
   blood_group: string;
-  age: string;
-  last_donation_date: string;
+  last_donation_date: string | null;
 }
 
-const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
+const CAN_DONATE_TO: Record<string, string[]> = {
+  'O-':  ['O-', 'O+', 'A-', 'A+', 'B-', 'B+', 'AB-', 'AB+'],
+  'O+':  ['O+', 'A+', 'B+', 'AB+'],
+  'A-':  ['A-', 'A+', 'AB-', 'AB+'],
+  'A+':  ['A+', 'AB+'],
+  'B-':  ['B-', 'B+', 'AB-', 'AB+'],
+  'B+':  ['B+', 'AB+'],
+  'AB-': ['AB-', 'AB+'],
+  'AB+': ['AB+'],
+};
+
+const isCompatible = (donorBG: string | undefined, neededBG: string) =>
+  !!donorBG && (CAN_DONATE_TO[donorBG] || []).includes(neededBG);
 
 export default function DonorRequestsPage() {
   const router = useRouter();
@@ -37,16 +49,16 @@ export default function DonorRequestsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  // Modal state
   const [modalOpen, setModalOpen] = useState(false);
   const [activeRequest, setActiveRequest] = useState<BloodRequest | null>(null);
   const [tab, setTab] = useState<'SELF' | 'REFERRED'>('SELF');
   const [agreedTerms, setAgreedTerms] = useState(false);
-  const [referrals, setReferrals] = useState<ReferredDonor[]>([
-    { name: '', phone: '', blood_group: 'O+', age: '', last_donation_date: '' },
-  ]);
   const [submitting, setSubmitting] = useState(false);
   const [modalError, setModalError] = useState('');
+
+  const [candidates, setCandidates] = useState<ReferralCandidate[]>([]);
+  const [candidatesLoading, setCandidatesLoading] = useState(false);
+  const [selectedDonorIds, setSelectedDonorIds] = useState<number[]>([]);
 
   const fetchData = useCallback(async () => {
     setError('');
@@ -79,29 +91,45 @@ export default function DonorRequestsPage() {
     fetchData();
   }, [fetchData]);
 
-  const openModal = (req: BloodRequest) => {
+  const openModal = async (req: BloodRequest) => {
     setActiveRequest(req);
-    setTab(profile?.eligible_now ? 'SELF' : 'REFERRED');
+    const selfCompatible = isCompatible(profile?.blood_group, req.blood_group_needed);
+    const canSelf = profile?.eligible_now === true && selfCompatible;
+    setTab(canSelf ? 'SELF' : 'REFERRED');
     setAgreedTerms(false);
     setModalError('');
-    setReferrals([{ name: '', phone: '', blood_group: 'O+', age: '', last_donation_date: '' }]);
+    setSelectedDonorIds([]);
+    setCandidates([]);
     setModalOpen(true);
+
+    setCandidatesLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(
+        `http://localhost:5001/api/donor/referral-candidates?blood_group_needed=${encodeURIComponent(
+          req.blood_group_needed
+        )}&request_id=${req.request_id}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (res.ok) setCandidates(await res.json());
+    } catch {
+      /* silent */
+    } finally {
+      setCandidatesLoading(false);
+    }
   };
 
-  const addReferral = () => {
+  const toggleDonor = (donorId: number) => {
     if (!activeRequest) return;
-    const remaining = activeRequest.units_needed - activeRequest.units_pledged;
-    if (referrals.length >= remaining) return;
-    setReferrals([...referrals, { name: '', phone: '', blood_group: 'O+', age: '', last_donation_date: '' }]);
-  };
-
-  const removeReferral = (idx: number) => {
-    if (referrals.length <= 1) return;
-    setReferrals(referrals.filter((_, i) => i !== idx));
-  };
-
-  const updateReferral = (idx: number, field: keyof ReferredDonor, value: string) => {
-    setReferrals(referrals.map((r, i) => (i === idx ? { ...r, [field]: value } : r)));
+    const remaining =
+      activeRequest.units_needed -
+      activeRequest.units_pledged -
+      (activeRequest.units_pending || 0);
+    setSelectedDonorIds((prev) => {
+      if (prev.includes(donorId)) return prev.filter((id) => id !== donorId);
+      if (prev.length >= remaining) return prev;
+      return [...prev, donorId];
+    });
   };
 
   const submitPledge = async () => {
@@ -111,29 +139,16 @@ export default function DonorRequestsPage() {
       setModalError('You must agree to the Terms & Conditions before proceeding.');
       return;
     }
+    if (tab === 'REFERRED' && selectedDonorIds.length === 0) {
+      setModalError('Please select at least one donor to refer.');
+      return;
+    }
 
     setSubmitting(true);
     try {
       const token = localStorage.getItem('token');
       const body: any = { type: tab, agreedTerms };
-
-      if (tab === 'REFERRED') {
-        // Validate all referral fields
-        for (const r of referrals) {
-          if (!r.name.trim() || !r.phone.trim() || !r.age) {
-            setModalError('Please fill all referral fields (name, phone, blood group, age).');
-            setSubmitting(false);
-            return;
-          }
-        }
-        body.referredDonors = referrals.map((r) => ({
-          name: r.name.trim(),
-          phone: r.phone.trim(),
-          blood_group: r.blood_group,
-          age: parseInt(r.age),
-          last_donation_date: r.last_donation_date || null,
-        }));
-      }
+      if (tab === 'REFERRED') body.referredDonorIds = selectedDonorIds;
 
       const res = await fetch(
         `http://localhost:5001/api/donor/requests/${activeRequest.request_id}/pledge`,
@@ -171,14 +186,50 @@ export default function DonorRequestsPage() {
     );
   }
 
-  const canSelfDonate = profile?.eligible_now === true;
+  const selfCompatibleWithActive = activeRequest
+    ? isCompatible(profile?.blood_group, activeRequest.blood_group_needed)
+    : false;
+  const canSelfDonate = profile?.eligible_now === true && selfCompatibleWithActive;
+
+  // Helper to render the per-card eligibility badge
+  const renderBadge = (compatible: boolean) => {
+    if (!compatible) {
+      return (
+        <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-600 border border-slate-200">
+          ⚠️ Not your type
+        </span>
+      );
+    }
+    if (profile?.eligible_now) {
+      return (
+        <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700 border border-emerald-200">
+          ✅ You can donate
+        </span>
+      );
+    }
+    if (profile?.in_cooldown) {
+      return (
+        <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-700 border border-amber-200">
+          ⏳ Compatible · On cooldown
+        </span>
+      );
+    }
+    return (
+      <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-600 border border-slate-200">
+        ⚫ Compatible · Unavailable
+      </span>
+    );
+  };
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Available Blood Requests</h1>
-          <p className="text-slate-500 mt-1">Requests compatible with your blood group ({profile?.blood_group || '—'})</p>
+          <p className="text-slate-500 mt-1">
+            All pending requests · Your blood group:{' '}
+            <b>{profile?.blood_group || '—'}</b>
+          </p>
           <p className="text-xs text-slate-400 mt-1">Total: {requests.length} pending</p>
         </div>
         <button
@@ -189,7 +240,6 @@ export default function DonorRequestsPage() {
         </button>
       </div>
 
-      {/* Cooldown banner */}
       {profile?.in_cooldown && (
         <div className="p-4 bg-amber-50 border-2 border-amber-200 rounded-2xl flex items-start gap-3">
           <span className="text-2xl">⏳</span>
@@ -207,9 +257,12 @@ export default function DonorRequestsPage() {
         <div className="p-4 bg-slate-100 border-2 border-slate-300 rounded-2xl flex items-start gap-3">
           <span className="text-2xl">⚫</span>
           <div className="flex-1">
-            <p className="font-bold text-slate-700 text-sm">You&apos;ve marked yourself as Unavailable</p>
+            <p className="font-bold text-slate-700 text-sm">
+              You&apos;ve marked yourself as Unavailable
+            </p>
             <p className="text-slate-600 text-xs mt-1">
-              Toggle to <b>Available</b> in your dashboard to donate yourself, or refer someone else here.
+              Toggle to <b>Available</b> in your dashboard to donate yourself, or refer someone
+              else here.
             </p>
           </div>
         </div>
@@ -226,40 +279,57 @@ export default function DonorRequestsPage() {
           <span className="text-5xl block mb-4">🔔</span>
           <h3 className="text-lg font-bold text-slate-900">No requests available</h3>
           <p className="text-slate-500 text-sm mt-1">
-            There are no pending requests compatible with your blood group right now.
+            There are no pending blood requests right now.
           </p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           {requests.map((r) => {
-            const remaining = r.units_needed - r.units_pledged;
+            const remaining =
+              r.units_needed - r.units_pledged - (r.units_pending || 0);
             const myPledged = parseInt(r.my_pledged_count || '0');
-            const progressPct = Math.min(100, Math.round((r.units_fulfilled / r.units_needed) * 100));
+            const progressPct = Math.min(
+              100,
+              Math.round((r.units_fulfilled / r.units_needed) * 100)
+            );
+            const compatible = isCompatible(profile?.blood_group, r.blood_group_needed);
+
             return (
-              <div key={r.request_id} className="bg-white rounded-3xl border border-slate-200 shadow-sm hover:shadow-md transition p-6 space-y-4">
+              <div
+                key={r.request_id}
+                className="bg-white rounded-3xl border border-slate-200 shadow-sm hover:shadow-md transition p-6 space-y-4"
+              >
                 <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                   <div className="flex items-center gap-2">
                     <span className="text-xl">🩸</span>
-                    <span className="font-extrabold text-slate-900">Request #{r.request_id}</span>
+                    <span className="font-extrabold text-slate-900">
+                      Request #{r.request_id}
+                    </span>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-red-100 text-red-700 border border-red-200">
                       {r.blood_group_needed}
                     </span>
-                    <span className="text-xs font-bold uppercase tracking-wider text-amber-600 bg-amber-50 px-2.5 py-1 rounded-full border border-amber-200">
-                      Pending
-                    </span>
+                    {renderBadge(compatible)}
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3 text-xs">
                   <div className="p-3 bg-slate-50 rounded-xl">
-                    <p className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Patient</p>
-                    <p className="font-bold text-slate-800 text-sm">{r.first_name} {r.last_name}</p>
+                    <p className="text-[10px] uppercase font-bold tracking-wider text-slate-400">
+                      Patient
+                    </p>
+                    <p className="font-bold text-slate-800 text-sm">
+                      {r.first_name} {r.last_name}
+                    </p>
                   </div>
                   <div className="p-3 bg-slate-50 rounded-xl">
-                    <p className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Needed by</p>
-                    <p className="font-bold text-slate-800 text-sm">{formatDateDhaka(r.need_date)}</p>
+                    <p className="text-[10px] uppercase font-bold tracking-wider text-slate-400">
+                      Needed by
+                    </p>
+                    <p className="font-bold text-slate-800 text-sm">
+                      {formatDateDhaka(r.need_date)}
+                    </p>
                   </div>
                 </div>
 
@@ -278,10 +348,20 @@ export default function DonorRequestsPage() {
                       style={{ width: `${progressPct}%` }}
                     />
                   </div>
-                  {r.units_pledged > 0 && (
-                    <p className="text-[11px] text-slate-400 mt-1">
-                      {r.units_pledged} bag{r.units_pledged !== 1 ? 's' : ''} already pledged by other donors
-                    </p>
+                  {(r.units_pledged > 0 || r.units_pending > 0) && (
+                    <div className="flex flex-wrap gap-3 text-[11px] mt-2">
+                      {r.units_pledged > 0 && (
+                        <span className="text-emerald-700 font-bold">
+                          ✅ {r.units_pledged} bag
+                          {r.units_pledged !== 1 ? 's' : ''} confirmed
+                        </span>
+                      )}
+                      {r.units_pending > 0 && (
+                        <span className="text-amber-600 font-bold">
+                          ⏳ {r.units_pending} awaiting approval
+                        </span>
+                      )}
+                    </div>
                   )}
                 </div>
 
@@ -304,7 +384,11 @@ export default function DonorRequestsPage() {
                   onClick={() => openModal(r)}
                   className="w-full py-3 rounded-xl bg-gradient-to-r from-red-700 to-rose-600 hover:from-red-800 hover:to-rose-700 text-white font-bold text-sm transition shadow-lg shadow-red-500/25"
                 >
-                  {canSelfDonate ? '❤️ Donate or Refer' : '👥 Refer a Donor'}
+                  {compatible && profile?.eligible_now
+                    ? '❤️ Donate or Refer'
+                    : compatible
+                    ? '👥 Refer a Donor'
+                    : '👥 Refer a Compatible Donor'}
                 </button>
               </div>
             );
@@ -316,14 +400,20 @@ export default function DonorRequestsPage() {
       {modalOpen && activeRequest && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
           <div className="bg-white rounded-3xl max-w-lg w-full my-8 shadow-2xl border border-slate-200 overflow-hidden">
-            {/* Header */}
             <div className="bg-gradient-to-r from-red-700 to-rose-600 p-5 text-white">
               <div className="flex justify-between items-start">
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-wider text-red-100">Blood Request</p>
-                  <h3 className="text-xl font-black">#{activeRequest.request_id} · {activeRequest.blood_group_needed}</h3>
+                  <p className="text-xs font-bold uppercase tracking-wider text-red-100">
+                    Blood Request
+                  </p>
+                  <h3 className="text-xl font-black">
+                    #{activeRequest.request_id} · {activeRequest.blood_group_needed}
+                  </h3>
                   <p className="text-xs text-red-100 mt-1">
-                    {activeRequest.units_needed - activeRequest.units_pledged} bag(s) remaining
+                    {activeRequest.units_needed -
+                      activeRequest.units_pledged -
+                      (activeRequest.units_pending || 0)}{' '}
+                    bag(s) remaining
                   </p>
                 </div>
                 <button
@@ -335,7 +425,6 @@ export default function DonorRequestsPage() {
               </div>
             </div>
 
-            {/* Tabs */}
             <div className="flex border-b border-slate-200">
               <button
                 onClick={() => setTab('SELF')}
@@ -360,7 +449,6 @@ export default function DonorRequestsPage() {
               </button>
             </div>
 
-            {/* Body */}
             <div className="p-5 space-y-4 max-h-[60vh] overflow-y-auto">
               {modalError && (
                 <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs">
@@ -370,17 +458,50 @@ export default function DonorRequestsPage() {
 
               {tab === 'SELF' && (
                 <div className="space-y-3">
-                  <div className="p-4 bg-red-50 border border-red-200 rounded-2xl">
-                    <p className="text-sm font-bold text-red-900 mb-1">Self Donation</p>
-                    <p className="text-xs text-red-700">
-                      You&apos;ll donate <b>1 bag</b> of {activeRequest.blood_group_needed} blood.
-                    </p>
-                    <ul className="text-xs text-red-600 mt-2 space-y-1 list-disc list-inside">
-                      <li>Blood group compatible: ✅ {profile?.blood_group}</li>
-                      <li>Cooldown complete: ✅ (90+ days)</li>
-                      <li>You confirm physically fit to donate</li>
-                    </ul>
-                  </div>
+                  {!selfCompatibleWithActive ? (
+                    <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl">
+                      <p className="text-sm font-bold text-rose-900 mb-1">
+                        ⚠️ Your blood group can&apos;t donate to this request
+                      </p>
+                      <p className="text-xs text-rose-700">
+                        You are <b>{profile?.blood_group}</b>. This request needs{' '}
+                        <b>{activeRequest.blood_group_needed}</b>. Your blood type is not
+                        compatible with the patient&apos;s.
+                      </p>
+                      <button
+                        onClick={() => setTab('REFERRED')}
+                        className="mt-3 px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs"
+                      >
+                        Refer a Donor Instead →
+                      </button>
+                    </div>
+                  ) : !profile?.eligible_now ? (
+                    <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl">
+                      <p className="text-sm font-bold text-amber-900 mb-1">
+                        ⏳ You can&apos;t donate right now
+                      </p>
+                      <p className="text-xs text-amber-700">
+                        {profile?.in_cooldown
+                          ? `You're in the 90-day cooldown. Eligible again on ${formatDateDhaka(
+                              profile.next_eligible_date
+                            )}.`
+                          : 'You are currently marked as unavailable.'}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="p-4 bg-red-50 border border-red-200 rounded-2xl">
+                      <p className="text-sm font-bold text-red-900 mb-1">Self Donation</p>
+                      <p className="text-xs text-red-700">
+                        You&apos;ll donate <b>1 bag</b> of {activeRequest.blood_group_needed}{' '}
+                        blood.
+                      </p>
+                      <ul className="text-xs text-red-600 mt-2 space-y-1 list-disc list-inside">
+                        <li>Blood group compatible: ✅ {profile?.blood_group}</li>
+                        <li>Cooldown complete: ✅ (90+ days)</li>
+                        <li>You confirm physically fit to donate</li>
+                      </ul>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -388,85 +509,73 @@ export default function DonorRequestsPage() {
                 <div className="space-y-3">
                   <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl">
                     <p className="text-xs text-amber-800">
-                      📋 Each referred person donates <b>1 bag</b>. Add up to {activeRequest.units_needed - activeRequest.units_pledged} referrals.
+                      📋 Select up to{' '}
+                      <b>
+                        {activeRequest.units_needed -
+                          activeRequest.units_pledged -
+                          (activeRequest.units_pending || 0)}
+                      </b>{' '}
+                      registered donor(s). They must be available, eligible, and compatible
+                      with {activeRequest.blood_group_needed}.
+                    </p>
+                    <p className="text-[11px] text-amber-700 mt-1">
+                      ⓘ The referral will only count once the donor accepts it.
                     </p>
                   </div>
 
-                  {referrals.map((rd, idx) => (
-                    <div key={idx} className="p-4 border border-slate-200 rounded-2xl bg-slate-50 space-y-3">
-                      <div className="flex justify-between items-center">
-                        <span className="text-xs font-bold text-slate-600">Referral #{idx + 1}</span>
-                        {referrals.length > 1 && (
-                          <button
-                            onClick={() => removeReferral(idx)}
-                            className="text-rose-600 hover:text-rose-800 text-xs font-bold"
-                          >
-                            ✕ Remove
-                          </button>
-                        )}
-                      </div>
-
-                      <input
-                        type="text"
-                        placeholder="Full name"
-                        value={rd.name}
-                        onChange={(e) => updateReferral(idx, 'name', e.target.value)}
-                        className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-red-500"
-                      />
-                      <div className="grid grid-cols-2 gap-2">
-                        <input
-                          type="tel"
-                          placeholder="Phone"
-                          value={rd.phone}
-                          onChange={(e) => updateReferral(idx, 'phone', e.target.value)}
-                          className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-red-500"
-                        />
-                        <input
-                          type="number"
-                          placeholder="Age (18-60)"
-                          min={18}
-                          max={60}
-                          value={rd.age}
-                          onChange={(e) => updateReferral(idx, 'age', e.target.value)}
-                          className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-red-500"
-                        />
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <select
-                          value={rd.blood_group}
-                          onChange={(e) => updateReferral(idx, 'blood_group', e.target.value)}
-                          className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-red-500 bg-white"
-                        >
-                          {BLOOD_GROUPS.map((bg) => (
-                            <option key={bg} value={bg}>{bg}</option>
-                          ))}
-                        </select>
-                        <input
-                          type="date"
-                          placeholder="Last donation"
-                          value={rd.last_donation_date}
-                          onChange={(e) => updateReferral(idx, 'last_donation_date', e.target.value)}
-                          className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-red-500"
-                        />
-                      </div>
-                      <p className="text-[10px] text-slate-400">
-                        Leave last donation empty if they&apos;ve never donated.
-                      </p>
+                  {candidatesLoading ? (
+                    <p className="text-center text-slate-400 py-6 text-sm">
+                      Loading eligible donors...
+                    </p>
+                  ) : candidates.length === 0 ? (
+                    <div className="p-6 text-center text-slate-500 text-sm border-2 border-dashed border-slate-200 rounded-2xl">
+                      No compatible donors are currently available in the network.
                     </div>
-                  ))}
+                  ) : (
+                    <div className="space-y-2 max-h-64 overflow-y-auto">
+                      {candidates.map((c) => {
+                        const checked = selectedDonorIds.includes(c.donor_id);
+                        return (
+                          <label
+                            key={c.donor_id}
+                            className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition ${
+                              checked
+                                ? 'border-red-500 bg-red-50'
+                                : 'border-slate-200 hover:border-slate-300 bg-white'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => toggleDonor(c.donor_id)}
+                              className="h-4 w-4 rounded border-slate-300 text-red-600 focus:ring-red-500"
+                            />
+                            <div className="flex-1">
+                              <p className="text-sm font-bold text-slate-900">{c.name}</p>
+                              <p className="text-xs text-slate-500">
+                                <span className="inline-block px-2 py-0.5 rounded-full bg-red-100 text-red-700 font-bold mr-2">
+                                  {c.blood_group}
+                                </span>
+                                {c.last_donation_date
+                                  ? `Last donated ${formatDateDhaka(c.last_donation_date)}`
+                                  : 'First-time donor'}
+                              </p>
+                            </div>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
 
-                  {referrals.length < activeRequest.units_needed - activeRequest.units_pledged && (
-                    <button
-                      onClick={addReferral}
-                      className="w-full py-2 border-2 border-dashed border-slate-300 rounded-xl text-sm font-bold text-slate-600 hover:border-red-400 hover:text-red-600 transition"
-                    >
-                      + Add another referral
-                    </button>
+                  {selectedDonorIds.length > 0 && (
+                    <p className="text-xs text-slate-500 text-center font-medium">
+                      {selectedDonorIds.length} donor
+                      {selectedDonorIds.length !== 1 ? 's' : ''} selected
+                    </p>
                   )}
                 </div>
               )}
 
-              {/* Terms */}
               <label className="flex items-start gap-3 cursor-pointer pt-3 border-t border-slate-100">
                 <input
                   type="checkbox"
@@ -490,7 +599,6 @@ export default function DonorRequestsPage() {
               </label>
             </div>
 
-            {/* Footer */}
             <div className="p-5 border-t border-slate-100 bg-slate-50 flex gap-3">
               <button
                 onClick={() => setModalOpen(false)}
@@ -501,10 +609,16 @@ export default function DonorRequestsPage() {
               </button>
               <button
                 onClick={submitPledge}
-                disabled={submitting}
+                disabled={submitting || (tab === 'SELF' && !canSelfDonate)}
                 className="flex-1 py-3 bg-gradient-to-r from-red-700 to-rose-600 hover:from-red-800 hover:to-rose-700 text-white font-bold text-sm rounded-xl transition shadow-lg shadow-red-500/25 disabled:opacity-50"
               >
-                {submitting ? 'Submitting...' : 'Confirm Pledge'}
+                {submitting
+                  ? 'Submitting...'
+                  : tab === 'SELF'
+                  ? 'Confirm Donation'
+                  : `Send ${selectedDonorIds.length} Referral${
+                      selectedDonorIds.length !== 1 ? 's' : ''
+                    }`}
               </button>
             </div>
           </div>
